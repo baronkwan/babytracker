@@ -7,15 +7,18 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "deploy:pages": "wrangler pages deploy dist",
+    "deploy:worker": "wrangler deploy"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
+    "bcryptjs": "^2.4.3",
     "date-fns": "^4.4.0",
+    "jose": "^5.9.6",
     "lucide-react": "^1.26.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "recharts": "^3.10.0",
     "sonner": "^2.0.7",
     "tailwindcss": "^4.3.3"
   },
@@ -26,6 +29,7 @@
     "@vitejs/plugin-react": "^6.0.3",
     "oxlint": "^1.71.0",
     "typescript": "~6.0.2",
-    "vite": "^8.1.1"
+    "vite": "^8.1.1",
+    "vite-plugin-pwa": "^0.20.5"
   }
 }

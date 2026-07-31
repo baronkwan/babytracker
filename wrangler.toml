@@ -1,0 +1,15 @@
+name = "babylog-api"
+main = "worker/index.ts"
+compatibility_date = "2025-07-01"
+
+[vars]
+# Set via: wrangler secret put JWT_SECRET
+# Set via: wrangler secret put ADMIN_KEY
+
+[[d1_databases]]
+binding = "DB"
+database_name = "babylog"
+database_id = "7d8457e7-f081-4722-84a9-213f74a0333e"   # babylog-db
+
+[env.production]
+name = "babylog-api"

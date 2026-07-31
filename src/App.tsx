@@ -16,8 +16,34 @@ import {
   toDisplayVolume,
   unitLabel,
 } from './lib/utils'
+import { api, setToken, clearToken, getToken } from './lib/api'
 
 // ──────────────────────────────────────────────
+
+function useTheme() {
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    if (typeof window !== 'undefined') return (localStorage.getItem('theme') as 'light' | 'dark') || 'light'
+    return 'light'
+  })
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark')
+    localStorage.setItem('theme', theme)
+  }, [theme])
+  return { theme, toggleTheme: () => setTheme(t => t === 'dark' ? 'light' : 'dark') }
+}
+
+function useAuth() {
+  const [token, setTokenState] = useState<string | null>(getToken())
+  const login = async (username: string, password: string) => {
+    const res = await api.login(username, password)
+    setToken(res.token)
+    setTokenState(res.token)
+    return res
+  }
+  const logout = () => { clearToken(); setTokenState(null) }
+  return { token, login, logout }
+}
+
 // MAIN APP
 // ──────────────────────────────────────────────
 export default function App() {
@@ -26,6 +52,9 @@ export default function App() {
   const [excretes, setExcretes] = useState<ExcreteLog[]>([])
   const [tab, setTab] = useState<TabId>('home')
   const [loaded, setLoaded] = useState(false)
+  const [showAdmin, setShowAdmin] = useState(false)
+  const { theme, toggleTheme } = useTheme()
+  const { token, login, logout } = useAuth()
 
   useEffect(() => {
     setBaby(loadBaby())
@@ -84,11 +113,12 @@ export default function App() {
 
   const allLogs = useMemo(() => combineLogs(feeds, excretes), [feeds, excretes])
 
+  if (!token) return <LoginScreen onLogin={login} />
   if (!loaded) return <Splash />
 
   return (
     <div className="mx-auto flex min-h-dvh max-w-[480px] flex-col bg-[var(--bg)]">
-      <Header baby={baby} tab={tab} feeds={feeds} excretes={excretes} saveBaby={saveBaby} resetAll={resetAll} />
+      <Header baby={baby} tab={tab} feeds={feeds} excretes={excretes} saveBaby={saveBaby} resetAll={resetAll} theme={theme} toggleTheme={toggleTheme} onLogout={logout} onOpenAdmin={() => setShowAdmin(true)} />
       <main className="safe-pb flex-1 px-4 pt-3">
         {tab === 'home' && <Home baby={baby} feeds={feeds} excretes={excretes} allLogs={allLogs} deleteLog={deleteLog} setTab={setTab} />}
         {tab === 'feed' && <FeedForm baby={baby} addFeed={addFeed} setTab={setTab} />}
@@ -97,6 +127,7 @@ export default function App() {
         {tab === 'charts' && <Charts feeds={feeds} excretes={excretes} />}
       </main>
       <BottomNav tab={tab} setTab={setTab} />
+      {showAdmin && <AdminCreateUser onClose={() => setShowAdmin(false)} />}
     </div>
   )
 }
@@ -127,6 +158,10 @@ function Header({
   excretes,
   saveBaby,
   resetAll,
+  theme,
+  toggleTheme,
+  onLogout,
+  onOpenAdmin,
 }: {
   baby: BabyProfile
   tab: TabId
@@ -134,6 +169,10 @@ function Header({
   excretes: ExcreteLog[]
   saveBaby: (b: BabyProfile) => void
   resetAll: () => void
+  theme: 'light' | 'dark'
+  toggleTheme: () => void
+  onLogout: () => void
+  onOpenAdmin: () => void
 }) {
   const [showSettings, setShowSettings] = useState(false)
   const [showReport, setShowReport] = useState(false)
@@ -159,6 +198,9 @@ function Header({
             </div>
           </div>
           <div className="flex gap-1.5">
+            <button onClick={toggleTheme} className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] text-sm active:bg-[var(--surface2)]">
+              {theme === 'dark' ? '☀️' : '🌙'}
+            </button>
             <button
               onClick={() => setShowReport(true)}
               className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium active:bg-[var(--surface2)]"
@@ -172,6 +214,8 @@ function Header({
             >
               ⚙️
             </button>
+            <button onClick={onOpenAdmin} className="px-3 py-1.5 text-xs rounded-xl border border-[var(--border)] bg-[var(--surface)] active:bg-[var(--surface2)]">建立用戶</button>
+            <button onClick={onLogout} className="text-xs text-[var(--muted)] active:text-[var(--red)]">登出</button>
           </div>
         </div>
         <div className="mt-2 text-sm font-semibold tracking-tight text-[var(--teal)]">{titles[tab]}</div>
@@ -935,3 +979,71 @@ function ReportModal({
     </div>
   )
 }
+
+function LoginScreen({ onLogin }: { onLogin: (u: string, p: string) => Promise<any> }) {
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
+  const handleLogin = async () => {
+    if (!username || !password) return
+    setLoading(true); setError('')
+    try { await onLogin(username, password) }
+    catch (e: any) { setError(e.message || '登入失敗') }
+    finally { setLoading(false) }
+  }
+  return (
+    <div className="flex min-h-dvh items-center justify-center bg-[var(--bg)] p-6">
+      <div className="w-full max-w-[360px]">
+        <div className="text-center mb-8">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--teal)] to-[var(--pink)]">
+            <span className="text-4xl">👶</span>
+          </div>
+          <div className="text-2xl font-semibold">BabyLog</div>
+        </div>
+        <div className="space-y-4">
+          <input type="text" placeholder="用戶名" value={username} onChange={e => setUsername(e.target.value)} className="field w-full" autoComplete="username" />
+          <input type="password" placeholder="密碼" value={password} onChange={e => setPassword(e.target.value)} className="field w-full" autoComplete="current-password" onKeyDown={e => e.key === 'Enter' && handleLogin()} />
+          {error && <div className="text-sm text-[var(--red)]">{error}</div>}
+          <button onClick={handleLogin} disabled={loading} className="bg-[var(--teal)] hover:opacity-90 w-full py-3 rounded-xl text-white font-semibold text-base disabled:opacity-50">
+            {loading ? '登入中...' : '登入'}
+          </button>
+        </div>
+        <div className="mt-6 text-center text-xs text-[var(--muted)]">首次使用請聯絡管理員建立帳號</div>
+      </div>
+    </div>
+  )
+}
+
+function AdminCreateUser({ onClose }: { onClose: () => void }) {
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [adminKey, setAdminKey] = useState('')
+  const [msg, setMsg] = useState('')
+  const create = async () => {
+    if (!username || !password || !adminKey) return
+    try {
+      await api.createUser(username, password, adminKey)
+      setMsg('✅ 用戶建立成功')
+      setTimeout(onClose, 1200)
+    } catch (e: any) { setMsg('❌ ' + (e.message || '建立失敗')) }
+  }
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
+      <div className="card w-full max-w-[360px] p-6" onClick={e => e.stopPropagation()}>
+        <div className="text-lg font-semibold mb-4">建立新用戶</div>
+        <div className="space-y-3">
+          <input placeholder="用戶名" value={username} onChange={e => setUsername(e.target.value)} className="field w-full" />
+          <input type="password" placeholder="密碼" value={password} onChange={e => setPassword(e.target.value)} className="field w-full" />
+          <input type="password" placeholder="ADMIN_KEY" value={adminKey} onChange={e => setAdminKey(e.target.value)} className="field w-full" />
+        </div>
+        {msg && <div className="mt-3 text-sm">{msg}</div>}
+        <div className="mt-4 flex gap-2">
+          <button onClick={onClose} className="flex-1 py-2 rounded-xl border border-[var(--border)]">取消</button>
+          <button onClick={create} className="flex-1 py-2 rounded-xl bg-[var(--teal)] text-white font-medium">建立</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
