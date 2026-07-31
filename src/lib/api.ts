@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_BASE || 'https://baron-mac-mini.baronjetso.workers.dev'
+const API_BASE = import.meta.env.VITE_API_BASE || 'https://babylog-api.baronjetso.workers.dev'
 
 let token: string | null = localStorage.getItem('babylog_token')
 
