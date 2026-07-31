@@ -113,22 +113,27 @@ export default function App() {
 
   const allLogs = useMemo(() => combineLogs(feeds, excretes), [feeds, excretes])
 
-  if (!token) return <LoginScreen onLogin={login} />
-  if (!loaded) return <Splash />
+  if (!loaded && token) return <Splash />
 
   return (
-    <div className="mx-auto flex min-h-dvh max-w-[480px] flex-col bg-[var(--bg)]">
-      <Header baby={baby} tab={tab} feeds={feeds} excretes={excretes} saveBaby={saveBaby} resetAll={resetAll} theme={theme} toggleTheme={toggleTheme} onLogout={logout} onOpenAdmin={() => setShowAdmin(true)} />
-      <main className="safe-pb flex-1 px-4 pt-3">
-        {tab === 'home' && <Home baby={baby} feeds={feeds} excretes={excretes} allLogs={allLogs} deleteLog={deleteLog} setTab={setTab} />}
-        {tab === 'feed' && <FeedForm baby={baby} addFeed={addFeed} setTab={setTab} />}
-        {tab === 'excrete' && <ExcreteForm addExcrete={addExcrete} setTab={setTab} />}
-        {tab === 'history' && <History allLogs={allLogs} deleteLog={deleteLog} />}
-        {tab === 'charts' && <Charts feeds={feeds} excretes={excretes} />}
-      </main>
-      <BottomNav tab={tab} setTab={setTab} />
+    <>
+      {!token ? (
+        <LoginScreen onLogin={login} onOpenAdmin={() => setShowAdmin(true)} />
+      ) : (
+        <div className="mx-auto flex min-h-dvh max-w-[480px] flex-col bg-[var(--bg)]">
+          <Header baby={baby} tab={tab} feeds={feeds} excretes={excretes} saveBaby={saveBaby} resetAll={resetAll} theme={theme} toggleTheme={toggleTheme} onLogout={logout} onOpenAdmin={() => setShowAdmin(true)} />
+          <main className="safe-pb flex-1 px-4 pt-3">
+            {tab === 'home' && <Home baby={baby} feeds={feeds} excretes={excretes} allLogs={allLogs} deleteLog={deleteLog} setTab={setTab} />}
+            {tab === 'feed' && <FeedForm baby={baby} addFeed={addFeed} setTab={setTab} />}
+            {tab === 'excrete' && <ExcreteForm addExcrete={addExcrete} setTab={setTab} />}
+            {tab === 'history' && <History allLogs={allLogs} deleteLog={deleteLog} />}
+            {tab === 'charts' && <Charts feeds={feeds} excretes={excretes} />}
+          </main>
+          <BottomNav tab={tab} setTab={setTab} />
+        </div>
+      )}
       {showAdmin && <AdminCreateUser onClose={() => setShowAdmin(false)} />}
-    </div>
+    </>
   )
 }
 
@@ -980,7 +985,7 @@ function ReportModal({
   )
 }
 
-function LoginScreen({ onLogin }: { onLogin: (u: string, p: string) => Promise<any> }) {
+function LoginScreen({ onLogin, onOpenAdmin }: { onLogin: (u: string, p: string) => Promise<any>; onOpenAdmin: () => void }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -1009,7 +1014,7 @@ function LoginScreen({ onLogin }: { onLogin: (u: string, p: string) => Promise<a
             {loading ? '登入中...' : '登入'}
           </button>
         </div>
-        <div className="mt-6 text-center text-xs text-[var(--muted)]">首次使用請聯絡管理員建立帳號</div>
+        <div className="mt-6 text-center"><button onClick={onOpenAdmin} className="text-sm text-[var(--teal)] hover:underline">建立新用戶</button></div>
       </div>
     </div>
   )
