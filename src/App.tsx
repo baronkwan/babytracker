@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { BabyProfile, ExcreteLog, FeedLog, FeedType, LogEntry, TabId, Unit } from './lib/types'
 import { DEFAULT_BABY, DURATION_CHIPS, POOP_COLORS, POOP_TEXTURES, VOLUME_CHIPS_ML } from './lib/types'
 import { combineLogs, loadBaby, loadExcretes, loadFeeds, makeId, saveAll } from './lib/storage'
@@ -17,6 +17,22 @@ import {
   unitLabel,
 } from './lib/utils'
 import { api, setToken, clearToken, getToken } from './lib/api'
+import {
+  BarChart3,
+  Check,
+  Copy,
+  Droplets,
+  History as HistoryIcon,
+  Home as HomeIcon,
+  LogOut,
+  Milk,
+  MoonStar,
+  Settings,
+  Stethoscope,
+  Sun,
+  UserPlus,
+  X,
+} from 'lucide-react'
 
 // ──────────────────────────────────────────────
 
@@ -28,6 +44,7 @@ function useTheme() {
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark')
     localStorage.setItem('theme', theme)
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'dark' ? '#0b1220' : '#f8fafc')
   }, [theme])
   return { theme, toggleTheme: () => setTheme(t => t === 'dark' ? 'light' : 'dark') }
 }
@@ -53,6 +70,7 @@ export default function App() {
   const [tab, setTab] = useState<TabId>('home')
   const [loaded, setLoaded] = useState(false)
   const [showAdmin, setShowAdmin] = useState(false)
+  const [syncError, setSyncError] = useState<string | null>(null)
   const { theme, toggleTheme } = useTheme()
   const { token, login, logout } = useAuth()
 
@@ -62,6 +80,78 @@ export default function App() {
     setExcretes(loadExcretes())
     setLoaded(true)
   }, [])
+
+  // Server rows lack `kind` — add it back when hydrating.
+  const toFeed = (r: Record<string, unknown>): FeedLog => ({
+    id: String(r.id),
+    kind: 'feed',
+    timestamp: String(r.timestamp),
+    type: r.type === 'formula' ? 'formula' : 'breast',
+    volume: Number(r.volume) || 0,
+    duration: Number(r.duration) || 0,
+    side: (r.side as FeedLog['side']) || null,
+    notes: String(r.notes ?? ''),
+  })
+  const toExcrete = (r: Record<string, unknown>): ExcreteLog => ({
+    id: String(r.id),
+    kind: 'excrete',
+    timestamp: String(r.timestamp),
+    type: r.type === 'poop' || r.type === 'both' ? (r.type as ExcreteLog['type']) : 'wet',
+    color: String(r.color ?? ''),
+    consistency: String(r.consistency ?? ''),
+    notes: String(r.notes ?? ''),
+  })
+  const toBaby = (r: Record<string, unknown> | null): BabyProfile => ({
+    ...DEFAULT_BABY,
+    ...(r
+      ? {
+          name: String(r.name ?? DEFAULT_BABY.name),
+          dob: String(r.dob ?? DEFAULT_BABY.dob),
+          gender: r.gender === '男' ? '男' : '女',
+          birthWeight: Number(r.birth_weight) || 0,
+          unit: r.unit === 'oz' ? 'oz' : 'ml',
+        }
+      : {}),
+  })
+
+  // Server ∪ local by id — local-only rows (offline / failed push) survive a refresh.
+  const mergeById = <T extends { id: string }>(local: T[], server: T[]): T[] => {
+    const m = new Map<string, T>()
+    for (const x of [...local, ...server]) m.set(x.id, x)
+    return [...m.values()]
+  }
+
+  const refreshFromServer = useCallback(async () => {
+    const data = await api.getData()
+    const baby = toBaby(data.baby)
+    const localFeeds = loadFeeds()
+    const localExcretes = loadExcretes()
+    const sf = (data.feeds ?? []).map(toFeed)
+    const se = (data.excretes ?? []).map(toExcrete)
+    // Backfill: push local-only rows (offline / failed push / pre-sync data) up to the server.
+    // Fire-and-forget; a rejected push surfaces the banner once the promise settles.
+    const serverFeedIds = new Set(sf.map((f) => f.id))
+    const serverExcreteIds = new Set(se.map((e) => e.id))
+    for (const f of localFeeds) {
+      if (!serverFeedIds.has(f.id)) api.addFeed(f).catch(() => setSyncError('⚠️ 部分本機記錄未能上傳，將於下次同步重試'))
+    }
+    for (const e of localExcretes) {
+      if (!serverExcreteIds.has(e.id)) api.addExcrete(e).catch(() => setSyncError('⚠️ 部分本機記錄未能上傳，將於下次同步重試'))
+    }
+    const mf = mergeById(localFeeds, sf)
+    const me = mergeById(localExcretes, se)
+    setBaby(baby)
+    setFeeds(mf)
+    setExcretes(me)
+    saveAll(baby, mf, me)
+    setSyncError(null)
+  }, [])
+
+  // Refresh from cloud whenever a token appears (login or stored token on reload).
+  useEffect(() => {
+    if (!token) return
+    refreshFromServer().catch(() => setSyncError('⚠️ 無法讀取雲端資料 — 顯示本機資料'))
+  }, [token, refreshFromServer])
 
   const persist = useCallback(
     (b: BabyProfile, f: FeedLog[], e: ExcreteLog[]) => {
@@ -73,43 +163,53 @@ export default function App() {
     [],
   )
 
+  // Optimistic local write + push to server. Failure keeps local change and shows a banner.
+  const push = useCallback((fn: () => Promise<unknown>) => {
+    fn().then(() => setSyncError(null)).catch(() => setSyncError('⚠️ 同步失敗 — 改動僅存本機，下次成功同步後合併'))
+  }, [])
+
   const addFeed = useCallback(
     (log: FeedLog) => {
       const f = [log, ...feeds]
       persist(baby, f, excretes)
+      push(() => api.addFeed(log))
     },
-    [baby, feeds, excretes, persist],
+    [baby, feeds, excretes, persist, push],
   )
 
   const addExcrete = useCallback(
     (log: ExcreteLog) => {
       const e = [log, ...excretes]
       persist(baby, feeds, e)
+      push(() => api.addExcrete(log))
     },
-    [baby, feeds, excretes, persist],
+    [baby, feeds, excretes, persist, push],
   )
 
   const saveBaby = useCallback(
     (b: BabyProfile) => {
       persist(b, feeds, excretes)
+      push(() => api.saveBaby(b))
     },
-    [feeds, excretes, persist],
+    [feeds, excretes, persist, push],
   )
 
   const deleteLog = useCallback(
-    (id: string) => {
-      const f = feeds.filter((x) => x.id !== id)
-      const e = excretes.filter((x) => x.id !== id)
+    (id: string, kind: 'feed' | 'excrete') => {
+      const f = kind === 'feed' ? feeds.filter((x) => x.id !== id) : feeds
+      const e = kind === 'excrete' ? excretes.filter((x) => x.id !== id) : excretes
       persist(baby, f, e)
+      push(() => api.deleteLog(id, kind))
     },
-    [baby, feeds, excretes, persist],
+    [baby, feeds, excretes, persist, push],
   )
 
   const resetAll = useCallback(() => {
     if (!window.confirm('清除所有記錄？此操作無法復原。')) return
     const b = { ...DEFAULT_BABY, dob: baby.dob }
     persist(b, [], [])
-  }, [baby.dob, persist])
+    push(() => api.deleteAll())
+  }, [baby.dob, persist, push])
 
   const allLogs = useMemo(() => combineLogs(feeds, excretes), [feeds, excretes])
 
@@ -122,12 +222,15 @@ export default function App() {
       ) : (
         <div className="mx-auto flex min-h-dvh max-w-[480px] flex-col bg-[var(--bg)]">
           <Header baby={baby} tab={tab} feeds={feeds} excretes={excretes} saveBaby={saveBaby} resetAll={resetAll} theme={theme} toggleTheme={toggleTheme} onLogout={logout} onOpenAdmin={() => setShowAdmin(true)} />
+          {syncError && (
+            <div className="mx-4 mt-2 rounded-xl bg-[var(--red)]/10 px-3 py-2 text-xs font-medium text-[var(--red)]">{syncError}</div>
+          )}
           <main className="safe-pb flex-1 px-4 pt-3">
             {tab === 'home' && <Home baby={baby} feeds={feeds} excretes={excretes} allLogs={allLogs} deleteLog={deleteLog} setTab={setTab} />}
             {tab === 'feed' && <FeedForm baby={baby} addFeed={addFeed} setTab={setTab} />}
             {tab === 'excrete' && <ExcreteForm addExcrete={addExcrete} setTab={setTab} />}
-            {tab === 'history' && <History allLogs={allLogs} deleteLog={deleteLog} />}
-            {tab === 'charts' && <Charts feeds={feeds} excretes={excretes} />}
+            {tab === 'history' && <History allLogs={allLogs} deleteLog={deleteLog} unit={baby.unit} />}
+            {tab === 'charts' && <Charts feeds={feeds} excretes={excretes} unit={baby.unit} />}
           </main>
           <BottomNav tab={tab} setTab={setTab} />
         </div>
@@ -202,28 +305,37 @@ function Header({
               <div className="text-xs text-[var(--muted)]">{ageLabel(baby.dob)}</div>
             </div>
           </div>
-          <div className="flex gap-1.5">
-            <button onClick={toggleTheme} className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] text-sm active:bg-[var(--surface2)]">
-              {theme === 'dark' ? '☀️' : '🌙'}
+          <div className="flex items-center gap-1.5">
+            <button onClick={toggleTheme} aria-label="切換主題" className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] active:bg-[var(--surface2)]">
+              {theme === 'dark' ? <Sun size={18} /> : <MoonStar size={18} />}
             </button>
             <button
               onClick={() => setShowReport(true)}
-              className="rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-xs font-medium active:bg-[var(--surface2)]"
+              className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] active:bg-[var(--surface2)]"
+              aria-label="報告"
             >
-              🩺 報告
+              <Stethoscope size={18} />
             </button>
             <button
               onClick={() => setShowSettings(true)}
-              className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] text-sm active:bg-[var(--surface2)]"
+              className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] active:bg-[var(--surface2)]"
               aria-label="設定"
             >
-              ⚙️
+              <Settings size={18} />
             </button>
-            <button onClick={onOpenAdmin} className="px-3 py-1.5 text-xs rounded-xl border border-[var(--border)] bg-[var(--surface)] active:bg-[var(--surface2)]">建立用戶</button>
-            <button onClick={onLogout} className="text-xs text-[var(--muted)] active:text-[var(--red)]">登出</button>
+            <button
+              onClick={onOpenAdmin}
+              aria-label="建立用戶"
+              className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] active:bg-[var(--surface2)]"
+            >
+              <UserPlus size={18} />
+            </button>
+            <button onClick={onLogout} aria-label="登出" className="flex h-9 w-9 items-center justify-center text-[var(--muted)] active:text-[var(--red)]">
+              <LogOut size={18} />
+            </button>
           </div>
         </div>
-        <div className="mt-2 text-sm font-semibold tracking-tight text-[var(--teal)]">{titles[tab]}</div>
+        <div className="mt-1 text-xl font-bold tracking-tight text-[var(--text)]">{titles[tab]}</div>
       </header>
 
       {showSettings && <SettingsModal baby={baby} saveBaby={saveBaby} resetAll={resetAll} onClose={() => setShowSettings(false)} />}
@@ -236,12 +348,12 @@ function Header({
 // BOTTOM NAV
 // ──────────────────────────────────────────────
 function BottomNav({ tab, setTab }: { tab: TabId; setTab: (t: TabId) => void }) {
-  const items: { id: TabId; icon: string; label: string }[] = [
-    { id: 'home', icon: '🏠', label: '首頁' },
-    { id: 'feed', icon: '🍼', label: '餵奶' },
-    { id: 'excrete', icon: '💩', label: '排泄' },
-    { id: 'history', icon: '📋', label: '歷史' },
-    { id: 'charts', icon: '📈', label: '圖表' },
+  const items: { id: TabId; icon: ReactNode; label: string }[] = [
+    { id: 'home', icon: <HomeIcon size={24} />, label: '首頁' },
+    { id: 'feed', icon: <Milk size={24} />, label: '餵奶' },
+    { id: 'excrete', icon: <Droplets size={24} />, label: '排泄' },
+    { id: 'history', icon: <HistoryIcon size={24} />, label: '歷史' },
+    { id: 'charts', icon: <BarChart3 size={24} />, label: '圖表' },
   ]
 
   return (
@@ -253,10 +365,10 @@ function BottomNav({ tab, setTab }: { tab: TabId; setTab: (t: TabId) => void }) 
             <button
               key={it.id}
               onClick={() => setTab(it.id)}
-              className="flex flex-col items-center justify-center gap-0.5 text-xs transition-all active:scale-95"
+              className="nav-item flex flex-col items-center justify-center gap-0.5 text-xs"
               style={{ color: active ? 'var(--teal)' : 'var(--muted)' }}
             >
-              <span className="text-xl">{it.icon}</span>
+              {it.icon}
               <span>{it.label}</span>
             </button>
           )
@@ -281,7 +393,7 @@ function Home({
   feeds: FeedLog[]
   excretes: ExcreteLog[]
   allLogs: LogEntry[]
-  deleteLog: (id: string) => void
+  deleteLog: (id: string, kind: 'feed' | 'excrete') => void
   setTab: (t: TabId) => void
 }) {
   const tf = todayFeeds(feeds)
@@ -301,7 +413,7 @@ function Home({
           onClick={() => setTab('feed')}
           className="card flex items-center gap-3 rounded-2xl p-4 text-left transition-transform active:scale-[0.98]"
         >
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--teal-dim)] text-xl">🍼</div>
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--teal-dim)] text-[var(--teal)]"><Milk size={20} /></div>
           <div>
             <div className="text-sm font-semibold">記錄餵奶</div>
             <div className="text-xs text-[var(--muted)]">份量時長邊別</div>
@@ -311,7 +423,7 @@ function Home({
           onClick={() => setTab('excrete')}
           className="card flex items-center gap-3 rounded-2xl p-4 text-left transition-transform active:scale-[0.98]"
         >
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--pink-dim)] text-xl">💩</div>
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--pink-dim)] text-[var(--pink)]"><Droplets size={20} /></div>
           <div>
             <div className="text-sm font-semibold">記錄排泄</div>
             <div className="text-xs text-[var(--muted)]">尿布大便詳情</div>
@@ -347,7 +459,7 @@ function Home({
       {/* Recent */}
       <div>
         <div className="mb-2 flex items-center justify-between px-1">
-          <span className="text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">最近紀錄</span>
+          <span className="text-xs font-semibold uppercase tracking-wider text-[var(--muted)] section-label">最近紀錄</span>
           <button onClick={() => setTab('history')} className="text-xs text-[var(--teal)] active:text-[var(--teal-dim)]">
             查看全部 →
           </button>
@@ -357,7 +469,7 @@ function Home({
             <div className="card rounded-2xl p-5 text-center text-sm text-[var(--muted)]">尚無記錄，開始記錄吧 👆</div>
           )}
           {allLogs.slice(0, 5).map((log) => (
-            <LogCard key={log.id} log={log} unit={baby.unit} onDelete={() => deleteLog(log.id)} />
+            <LogCard key={log.id} log={log} unit={baby.unit} onDelete={() => deleteLog(log.id, log.kind)} />
           ))}
         </div>
       </div>
@@ -368,15 +480,15 @@ function Home({
 // ──────────────────────────────────────────────
 // LOG CARD (shared)
 // ──────────────────────────────────────────────
-function LogCard({ log, unit, onDelete }: { log: LogEntry; unit: Unit; onDelete: () => void }) {
+function LogCard({ log, unit, bare = false, onDelete }: { log: LogEntry; unit: Unit; bare?: boolean; onDelete: () => void }) {
   const [confirm, setConfirm] = useState(false)
 
   if (log.kind === 'feed') {
     return (
-      <div className="card rounded-2xl p-3.5 rise">
+      <div className={`${bare ? '' : 'card rounded-2xl'} p-3.5 rise`}>
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-start gap-2.5 min-w-0 flex-1">
-            <span className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-[var(--teal-dim)] text-sm">🍼</span>
+            <span className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-[var(--teal-dim)] text-[var(--teal)]"><Milk size={14} /></span>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 text-sm">
                 <span className="font-semibold">{feedTypeLabel(log.type)}</span>
@@ -400,10 +512,10 @@ function LogCard({ log, unit, onDelete }: { log: LogEntry; unit: Unit; onDelete:
           ) : (
             <button
               onClick={(e) => { e.stopPropagation(); setConfirm(true); setTimeout(() => setConfirm(false), 3000) }}
-              className="flex-shrink-0 text-sm text-[var(--muted)] active:text-[var(--red)]"
+              className="flex-shrink-0 text-[var(--muted)] active:text-[var(--red)]"
               aria-label="刪除"
             >
-              ✕
+              <X size={16} />
             </button>
           )}
         </div>
@@ -412,10 +524,10 @@ function LogCard({ log, unit, onDelete }: { log: LogEntry; unit: Unit; onDelete:
   }
 
   return (
-    <div className="card rounded-2xl p-3.5 rise">
+    <div className={`${bare ? '' : 'card rounded-2xl'} p-3.5 rise`}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-2.5 min-w-0 flex-1">
-          <span className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-[var(--pink-dim)] text-sm">💩</span>
+          <span className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-[var(--pink-dim)] text-[var(--pink)]"><Droplets size={14} /></span>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 text-sm">
               <span className="font-semibold">{excreteLabel(log.type)}</span>
@@ -435,10 +547,10 @@ function LogCard({ log, unit, onDelete }: { log: LogEntry; unit: Unit; onDelete:
         ) : (
           <button
             onClick={(e) => { e.stopPropagation(); setConfirm(true); setTimeout(() => setConfirm(false), 3000) }}
-            className="flex-shrink-0 text-sm text-[var(--muted)] active:text-[var(--red)]"
+            className="flex-shrink-0 text-[var(--muted)] active:text-[var(--red)]"
             aria-label="刪除"
           >
-            ✕
+            <X size={16} />
           </button>
         )}
       </div>
@@ -490,14 +602,14 @@ function FeedForm({ baby, addFeed, setTab }: { baby: BabyProfile; addFeed: (f: F
             onClick={() => setType('breast')}
             className={`chip flex-1 text-center ${type === 'breast' ? 'active' : ''}`}
           >
-            🤱 母乳
+            母乳
           </button>
           <div className="w-2" />
           <button
             onClick={() => setType('formula')}
             className={`chip flex-1 text-center ${type === 'formula' ? 'active' : ''}`}
           >
-            🍼 配方奶
+            配方奶
           </button>
         </div>
 
@@ -624,7 +736,7 @@ function ExcreteForm({ addExcrete, setTab }: { addExcrete: (e: ExcreteLog) => vo
               } ${type === t ? (t === 'wet' ? 'active' : 'pink active') : ''}`}
               style={t === 'wet' && type === t ? { borderColor: 'var(--blue)', background: 'rgba(96,165,250,.14)', color: 'var(--blue)' } : {}} // handled by CSS class for others
             >
-              {t === 'wet' ? '💧 濕尿布' : t === 'poop' ? '💩 大便' : '🔄 兩者'}
+              {t === 'wet' ? '濕尿布' : t === 'poop' ? '大便' : '兩者'}
             </button>
           ))}
         </div>
@@ -683,7 +795,7 @@ function ExcreteForm({ addExcrete, setTab }: { addExcrete: (e: ExcreteLog) => vo
 // ──────────────────────────────────────────────
 // HISTORY
 // ──────────────────────────────────────────────
-function History({ allLogs, deleteLog }: { allLogs: LogEntry[]; deleteLog: (id: string) => void }) {
+function History({ allLogs, deleteLog, unit }: { allLogs: LogEntry[]; deleteLog: (id: string, kind: 'feed' | 'excrete') => void; unit: Unit }) {
   const [filter, setFilter] = useState<'all' | 'feed' | 'excrete'>('all')
   const [search, setSearch] = useState('')
 
@@ -716,12 +828,12 @@ function History({ allLogs, deleteLog }: { allLogs: LogEntry[]; deleteLog: (id: 
         placeholder="搜尋備註..."
         className="field"
       />
-      <div className="space-y-2">
+      <div className="group-list">
         {filtered.length === 0 && (
-          <div className="card rounded-2xl p-6 text-center text-sm text-[var(--muted)]">沒有符合的記錄</div>
+          <div className="p-6 text-center text-sm text-[var(--muted)]">沒有符合的記錄</div>
         )}
         {filtered.map((log) => (
-          <LogCard key={log.id} log={log} unit="ml" onDelete={() => deleteLog(log.id)} />
+          <LogCard key={log.id} log={log} unit={unit} bare onDelete={() => deleteLog(log.id, log.kind)} />
         ))}
       </div>
     </div>
@@ -731,12 +843,21 @@ function History({ allLogs, deleteLog }: { allLogs: LogEntry[]; deleteLog: (id: 
 // ──────────────────────────────────────────────
 // CHARTS
 // ──────────────────────────────────────────────
-function Charts({ feeds, excretes }: { feeds: FeedLog[]; excretes: ExcreteLog[] }) {
-  const days = lastNDaysKeys(7)
+const PERIODS = [
+  { id: '7d', label: '7天', days: 7, barW: 28, spacing: 64, labelEvery: 1 },
+  { id: '1m', label: '1月', days: 30, barW: 12, spacing: 28, labelEvery: 5 },
+  { id: '3m', label: '3月', days: 90, barW: 8, spacing: 20, labelEvery: 10 },
+] as const
+type PeriodId = (typeof PERIODS)[number]['id']
+
+function Charts({ feeds, excretes, unit }: { feeds: FeedLog[]; excretes: ExcreteLog[]; unit: Unit }) {
+  const [period, setPeriod] = useState<PeriodId>('7d')
+  const cfg = PERIODS.find((p) => p.id === period)!
+  const days = lastNDaysKeys(cfg.days)
   const label = days.map((d) => d.slice(5))
 
   const feedVol = days.map((d) =>
-    feeds.filter((f) => f.timestamp.startsWith(d)).reduce((s, f) => s + (f.volume || 0), 0),
+    toDisplayVolume(feeds.filter((f) => f.timestamp.startsWith(d)).reduce((s, f) => s + (f.volume || 0), 0), unit),
   )
   const excByDay = days.map((d) => {
     const ex = excretes.filter((e) => e.timestamp.startsWith(d))
@@ -753,22 +874,30 @@ function Charts({ feeds, excretes }: { feeds: FeedLog[]; excretes: ExcreteLog[] 
 
   return (
     <div className="space-y-5 rise">
+      <div className="flex gap-2">
+        {PERIODS.map((p) => (
+          <button key={p.id} onClick={() => setPeriod(p.id)} className={`chip flex-1 text-center text-xs ${period === p.id ? 'active' : ''}`}>
+            {p.label}
+          </button>
+        ))}
+      </div>
+
       {/* Feed chart */}
       <div className="card rounded-2xl p-4">
         <div className="mb-3 flex items-center justify-between">
           <span className="text-sm font-semibold">餵奶量趨勢</span>
-          <span className="text-xs text-[var(--muted)]">近7天 · ml/日</span>
+          <span className="text-xs text-[var(--muted)]">近{cfg.days}天 · {unitLabel(unit)}/日</span>
         </div>
-        <BarChart labels={label} data={feedVol} max={maxVol} color="var(--teal)" h={CHART_H} />
+        <BarChart labels={label} data={feedVol} max={maxVol} color="var(--teal)" h={CHART_H} barW={cfg.barW} spacing={cfg.spacing} labelEvery={cfg.labelEvery} />
       </div>
 
       {/* Excrete chart */}
       <div className="card rounded-2xl p-4">
         <div className="mb-3 flex items-center justify-between">
           <span className="text-sm font-semibold">排泄頻率</span>
-          <span className="text-xs text-[var(--muted)]">近7天 · 次/日</span>
+          <span className="text-xs text-[var(--muted)]">近{cfg.days}天 · 次/日</span>
         </div>
-        <BarChart labels={label} data={excByDay.map((d) => d.total)} max={maxEx} color="var(--pink)" h={CHART_H} />
+        <BarChart labels={label} data={excByDay.map((d) => d.total)} max={maxEx} color="var(--pink)" h={CHART_H} barW={cfg.barW} spacing={cfg.spacing} labelEvery={cfg.labelEvery} />
       </div>
 
       <div className="text-center text-xs text-[var(--muted)]">數據僅供參考 · 如有異常請即時聯絡醫生</div>
@@ -776,10 +905,10 @@ function Charts({ feeds, excretes }: { feeds: FeedLog[]; excretes: ExcreteLog[] 
   )
 }
 
-function BarChart({ labels, data, max, color, h }: { labels: string[]; data: number[]; max: number; color: string; h: number }) {
-  const barW = 28
-  const totalW = labels.length * 64 + 16
+function BarChart({ labels, data, max, color, h, barW = 28, spacing = 64, labelEvery = 1 }: { labels: string[]; data: number[]; max: number; color: string; h: number; barW?: number; spacing?: number; labelEvery?: number }) {
+  const totalW = labels.length * spacing + 16
   const chartH = h
+  const showValues = spacing >= 40
 
   return (
     <div className="-mx-4 overflow-x-auto scroll-hide px-4">
@@ -798,17 +927,21 @@ function BarChart({ labels, data, max, color, h }: { labels: string[]; data: num
         ))}
         {data.map((v, i) => {
           const barH = max > 0 ? ((v / max) * (chartH - 32)) : 0
-          const x = i * 64 + 18
+          const x = i * spacing + (spacing - barW) / 2
           const y = chartH - 20 - barH
           return (
             <g key={i}>
-              <rect x={x} y={y} width={barW} height={Math.max(barH, 2)} rx={6} fill={color} opacity={0.85} />
-              <text x={x + barW / 2} y={y - 6} textAnchor="middle" fill="var(--muted)" fontSize="10" fontFamily="SF Pro Text,sans-serif">
-                {v > 0 ? v : ''}
-              </text>
-              <text x={x + barW / 2} y={chartH - 2} textAnchor="middle" fill="var(--muted)" fontSize="10" fontFamily="SF Pro Text,sans-serif">
-                {labels[i]}
-              </text>
+              <rect x={x} y={y} width={barW} height={Math.max(barH, 2)} rx={Math.min(6, barW / 2)} fill={color} opacity={0.85} />
+              {showValues && (
+                <text x={x + barW / 2} y={y - 6} textAnchor="middle" fill="var(--muted)" fontSize="10" fontFamily="SF Pro Text,sans-serif">
+                  {v > 0 ? v : ''}
+                </text>
+              )}
+              {i % labelEvery === 0 && (
+                <text x={x + barW / 2} y={chartH - 2} textAnchor="middle" fill="var(--muted)" fontSize="10" fontFamily="SF Pro Text,sans-serif">
+                  {labels[i]}
+                </text>
+              )}
             </g>
           )
         })}
@@ -832,21 +965,27 @@ function SettingsModal({
   onClose: () => void
 }) {
   const [form, setForm] = useState(baby)
+  const [closing, setClosing] = useState(false)
+
+  const close = () => {
+    setClosing(true)
+    setTimeout(onClose, 180)
+  }
 
   const save = () => {
     saveBaby(form)
-    onClose()
+    close()
   }
 
   return (
     <div
-      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center"
+      onClick={(e) => { if (e.target === e.currentTarget) close() }}
+      className={`fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center ${closing ? 'modal-scrim-exit' : 'modal-scrim'}`}
     >
-      <div className="w-full max-w-[420px] rounded-t-2xl bg-[var(--surface)] p-5 sm:rounded-2xl sm:m-4">
+      <div className={`w-full max-w-[420px] rounded-t-2xl bg-[var(--surface)] p-5 sm:rounded-2xl sm:m-4 ${closing ? 'modal-sheet exit' : 'modal-sheet'}`}>
         <div className="mb-4 flex items-center justify-between">
           <span className="text-lg font-semibold">設定</span>
-          <button onClick={onClose} className="text-xl text-[var(--muted)] active:text-[var(--text)]">✕</button>
+          <button onClick={close} aria-label="關閉" className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--muted)] active:bg-[var(--surface2)]"><X size={18} /></button>
         </div>
         <div className="space-y-3">
           <div>
@@ -910,7 +1049,7 @@ function SettingsModal({
             儲存設定
           </button>
           <button
-            onClick={() => { onClose(); resetAll(); }}
+            onClick={() => { close(); resetAll(); }}
             className="flex-1 rounded-2xl border border-[var(--red)]/30 bg-[var(--red)]/10 p-3 text-sm font-semibold text-[var(--red)] active:bg-[var(--red)]/20"
           >
             清除所有資料
@@ -936,7 +1075,13 @@ function ReportModal({
   onClose: () => void
 }) {
   const [copied, setCopied] = useState(false)
+  const [closing, setClosing] = useState(false)
   const text = buildDoctorText(baby, feeds, excretes)
+
+  const close = () => {
+    setClosing(true)
+    setTimeout(onClose, 180)
+  }
 
   const copy = async () => {
     try {
@@ -956,20 +1101,20 @@ function ReportModal({
 
   return (
     <div
-      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center"
+      onClick={(e) => { if (e.target === e.currentTarget) close() }}
+      className={`fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center ${closing ? 'modal-scrim-exit' : 'modal-scrim'}`}
     >
-      <div className="flex max-h-[85dvh] w-full max-w-[420px] flex-col rounded-t-2xl bg-[var(--surface)] sm:rounded-2xl sm:m-4">
+      <div className={`flex max-h-[85dvh] w-full max-w-[420px] flex-col rounded-t-2xl bg-[var(--surface)] sm:rounded-2xl sm:m-4 ${closing ? 'modal-sheet exit' : 'modal-sheet'}`}>
         <div className="flex items-center justify-between border-b border-[var(--border)] p-4">
           <div>
             <div className="text-lg font-semibold">醫生報告</div>
             <div className="text-xs text-[var(--muted)]">{baby.name} · {ageLabel(baby.dob)}</div>
           </div>
           <div className="flex gap-2">
-            <button onClick={copy} className="rounded-xl border border-[var(--border)] px-3 py-1.5 text-xs font-semibold active:bg-[var(--surface2)]">
-              {copied ? '✓ 已複製' : '📋 複製'}
+            <button onClick={copy} className="flex items-center gap-1.5 rounded-xl border border-[var(--border)] px-3 py-1.5 text-xs font-semibold active:bg-[var(--surface2)]">
+              {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? '已複製' : '複製'}
             </button>
-            <button onClick={onClose} className="text-xl text-[var(--muted)] active:text-[var(--text)]">✕</button>
+            <button onClick={close} aria-label="關閉" className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--muted)] active:bg-[var(--surface2)]"><X size={18} /></button>
           </div>
         </div>
         <div className="overflow-y-auto p-4">
@@ -1025,18 +1170,28 @@ function AdminCreateUser({ onClose }: { onClose: () => void }) {
   const [password, setPassword] = useState('')
   const [adminKey, setAdminKey] = useState('')
   const [msg, setMsg] = useState('')
+  const [closing, setClosing] = useState(false)
+
+  const close = () => {
+    setClosing(true)
+    setTimeout(onClose, 180)
+  }
+
   const create = async () => {
     if (!username || !password || !adminKey) return
     try {
       await api.createUser(username, password, adminKey)
       setMsg('✅ 用戶建立成功')
-      setTimeout(onClose, 1200)
+      setTimeout(close, 1200)
     } catch (e: any) { setMsg('❌ ' + (e.message || '建立失敗')) }
   }
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
-      <div className="card w-full max-w-[360px] p-6" onClick={e => e.stopPropagation()}>
-        <div className="text-lg font-semibold mb-4">建立新用戶</div>
+    <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 ${closing ? 'modal-scrim-exit' : 'modal-scrim'}`} onClick={close}>
+      <div className={`card w-full max-w-[360px] p-6 ${closing ? 'modal-sheet exit' : 'modal-sheet'}`} onClick={e => e.stopPropagation()}>
+        <div className="mb-4 flex items-center justify-between">
+          <span className="text-lg font-semibold">建立新用戶</span>
+          <button onClick={close} aria-label="關閉" className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--muted)] active:bg-[var(--surface2)]"><X size={18} /></button>
+        </div>
         <div className="space-y-3">
           <input placeholder="用戶名" value={username} onChange={e => setUsername(e.target.value)} className="field w-full" />
           <input type="password" placeholder="密碼" value={password} onChange={e => setPassword(e.target.value)} className="field w-full" />
@@ -1044,7 +1199,7 @@ function AdminCreateUser({ onClose }: { onClose: () => void }) {
         </div>
         {msg && <div className="mt-3 text-sm">{msg}</div>}
         <div className="mt-4 flex gap-2">
-          <button onClick={onClose} className="flex-1 py-2 rounded-xl border border-[var(--border)]">取消</button>
+          <button onClick={close} className="flex-1 py-2 rounded-xl border border-[var(--border)]">取消</button>
           <button onClick={create} className="flex-1 py-2 rounded-xl bg-[var(--teal)] text-white font-medium">建立</button>
         </div>
       </div>

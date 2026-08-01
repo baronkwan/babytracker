@@ -11,9 +11,13 @@
   --teal-dim: rgba(15, 118, 110, 0.1);
   --pink: #be185d;
   --pink-dim: rgba(190, 24, 93, 0.1);
+  --fill-teal: #0d9488;
+  --fill-pink: #db2777;
   --blue: #1d4ed8;
   --amber: #b45309;
   --red: #dc2626;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06);
   color-scheme: light;
 }
 
@@ -31,6 +35,8 @@
   --blue: #60a5fa;
   --amber: #fbbf24;
   --red: #f87171;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
   color-scheme: dark;
 }
 
@@ -54,6 +60,7 @@ body {
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  font-optical-sizing: auto;
   overscroll-behavior-y: none;
   -webkit-tap-highlight-color: transparent;
 }
@@ -81,6 +88,8 @@ button:disabled {
   cursor: not-allowed;
 }
 
+/* ── Layout ── */
+
 .safe-pb {
   padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
 }
@@ -89,17 +98,37 @@ button:disabled {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
+/* ── Typography: Apple §15 ── */
+
 .num {
   font-variant-numeric: tabular-nums;
   font-feature-settings: "tnum";
 }
 
+/* Large display numbers: negative tracking */
+.text-3xl.num,
+.huge-num {
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+/* Section labels: slightly positive tracking for legibility at small sizes */
+.section-label {
+  letter-spacing: 0.02em;
+}
+
+/* ── Cards: Apple §12 materials + depth ── */
+
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 1.25rem;
+  box-shadow: var(--shadow-sm);
 }
 
+/* ── Chips: spring-like easing ── */
+
+/* Spring-inspired cubic-bézier: damping 1.0, response ~0.3s equivalent */
 .chip {
   border: 1px solid var(--border);
   background: var(--surface2);
@@ -107,7 +136,11 @@ button:disabled {
   padding: 0.55rem 0.9rem;
   font-size: 0.875rem;
   font-weight: 600;
-  transition: 0.15s ease;
+  transition:
+    border-color 0.25s cubic-bezier(0.22, 0.61, 0.36, 1),
+    background 0.25s cubic-bezier(0.22, 0.61, 0.36, 1),
+    color 0.25s cubic-bezier(0.22, 0.61, 0.36, 1),
+    transform 0.1s ease-out;
 }
 
 .chip.active {
@@ -122,35 +155,49 @@ button:disabled {
   color: var(--pink);
 }
 
+.chip:active {
+  transform: scale(0.97);
+}
+
+/* ── Buttons: Apple §1 response ── */
+
 .btn-primary {
-  background: linear-gradient(135deg, #14b8a6, #0d9488);
+  background: var(--fill-teal);
   color: white;
   font-weight: 700;
   border: none;
   border-radius: 1rem;
   padding: 0.95rem 1rem;
   width: 100%;
-  box-shadow: 0 10px 24px rgba(20, 184, 166, 0.28);
+  box-shadow: 0 8px 20px rgba(13, 148, 136, 0.25);
+  transition: transform 0.1s ease-out, filter 0.2s ease;
+  will-change: transform;
 }
 
 .btn-primary:active {
-  transform: scale(0.98);
+  transform: scale(0.97);
+  filter: brightness(0.92);
 }
 
 .btn-pink {
-  background: linear-gradient(135deg, #f472b6, #db2777);
+  background: var(--fill-pink);
   color: white;
   font-weight: 700;
   border: none;
   border-radius: 1rem;
   padding: 0.95rem 1rem;
   width: 100%;
-  box-shadow: 0 10px 24px rgba(244, 114, 182, 0.28);
+  box-shadow: 0 8px 20px rgba(219, 39, 119, 0.25);
+  transition: transform 0.1s ease-out, filter 0.2s ease;
+  will-change: transform;
 }
 
 .btn-pink:active {
-  transform: scale(0.98);
+  transform: scale(0.97);
+  filter: brightness(0.92);
 }
+
+/* ── Fields ── */
 
 .field {
   width: 100%;
@@ -166,6 +213,22 @@ button:disabled {
   box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.12);
 }
 
+/* ── Grouped list: iOS Settings style ── */
+
+.group-list {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 1.25rem;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.group-list > * + * {
+  border-top: 1px solid var(--border);
+}
+
+/* ── Scroll hiding ── */
+
 .scroll-hide::-webkit-scrollbar {
   display: none;
 }
@@ -174,32 +237,140 @@ button:disabled {
   scrollbar-width: none;
 }
 
+/* ── Page transitions: spring-like rise ── */
+
 @keyframes rise {
   from {
     opacity: 0;
-    transform: translateY(12px);
+    transform: translateY(12px) scale(0.98);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translateY(0) scale(1);
   }
 }
 
 .rise {
-  animation: rise 0.22s ease;
+  animation: rise 0.35s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  will-change: transform, opacity;
 }
+
+/* ── Toast ── */
 
 @keyframes toast-in {
   from {
     opacity: 0;
-    transform: translate(-50%, 12px);
+    transform: translate(-50%, 16px) scale(0.95);
   }
   to {
     opacity: 1;
-    transform: translate(-50%, 0);
+    transform: translate(-50%, 0) scale(1);
   }
 }
 
 .toast {
-  animation: toast-in 0.18s ease;
+  animation: toast-in 0.25s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+/* ── Modal: Apple §7 spatial consistency + §12 materials ── */
+
+/* Scrim: dim background to focus */
+.modal-scrim {
+  animation: scrim-in 0.25s ease both;
+}
+@keyframes scrim-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.modal-scrim-exit {
+  animation: scrim-out 0.18s ease both;
+}
+@keyframes scrim-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* Sheet slides up from bottom, fades in */
+.modal-sheet {
+  animation: sheet-up 0.3s cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+@keyframes sheet-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* Exit: reverse the enter path — spatial consistency */
+.modal-sheet.exit {
+  animation: sheet-down 0.2s cubic-bezier(0.55, 0, 1, 0.45) both;
+}
+@keyframes sheet-down {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(20px) scale(0.97);
+  }
+}
+
+/* ── Interactive elements: Apple §1 ── */
+
+/* All interactive buttons get instant press feedback */
+button:not(.chip):not(.btn-primary):not(.btn-pink):active {
+  transform: scale(0.97);
+}
+
+/* Bottom nav items */
+.nav-item {
+  transition:
+    color 0.25s cubic-bezier(0.22, 0.61, 0.36, 1),
+    transform 0.1s ease-out;
+}
+
+.nav-item:active {
+  transform: scale(0.9);
+}
+
+/* ── Reduced motion: Apple §14 ── */
+
+@media (prefers-reduced-motion: reduce) {
+  .rise,
+  .modal-sheet,
+  .toast {
+    animation: none !important;
+    transform: none !important;
+    opacity: 1;
+  }
+
+  .modal-sheet.exit {
+    animation: fade-out 0.15s ease both !important;
+  }
+
+  .btn-primary,
+  .btn-pink,
+  .chip,
+  .nav-item {
+    transition: opacity 0.15s ease !important;
+  }
+
+  @keyframes fade-out {
+    from { opacity: 1; }
+    to { opacity: 0; }
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  header,
+  nav[class*="fixed"] {
+    background: var(--surface) !important;
+    backdrop-filter: none !important;
+  }
 }

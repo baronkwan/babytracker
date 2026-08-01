@@ -1,3 +1,5 @@
+import type { BabyProfile, ExcreteLog, FeedLog } from './types'
+
 const API_BASE = import.meta.env.VITE_API_BASE || 'https://babylog-api.baronjetso.workers.dev'
 
 let token: string | null = localStorage.getItem('babylog_token')
@@ -16,16 +18,22 @@ export function getToken() {
   return token
 }
 
-async function request(path: string, options: RequestInit = {}) {
-  const headers: any = {
+export interface ApiData {
+  baby: Record<string, unknown> | null
+  feeds: Record<string, unknown>[]
+  excretes: Record<string, unknown>[]
+}
+
+async function request<T = any>(path: string, options: RequestInit = {}): Promise<T> {
+  const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...(options.headers || {})
+    ...(options.headers as Record<string, string> | undefined),
   }
   if (token) headers['Authorization'] = `Bearer ${token}`
 
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
-    headers
+    headers,
   })
 
   if (!res.ok) {
@@ -37,19 +45,20 @@ async function request(path: string, options: RequestInit = {}) {
 
 export const api = {
   login: (username: string, password: string) =>
-    request('/api/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
+    request<{ token: string; username: string }>('/api/login', { method: 'POST', body: JSON.stringify({ username, password }) }),
 
   createUser: (username: string, password: string, adminKey: string) =>
-    request('/api/admin/create-user', {
+    request<{ success: boolean }>('/api/admin/create-user', {
       method: 'POST',
-      body: JSON.stringify({ username, password, admin_key: adminKey })
+      body: JSON.stringify({ username, password, admin_key: adminKey }),
     }),
 
-  getData: () => request('/api/data'),
+  getData: () => request<ApiData>('/api/data'),
 
-  addFeed: (log: any) => request('/api/feeds', { method: 'POST', body: JSON.stringify(log) }),
-  addExcrete: (log: any) => request('/api/excretes', { method: 'POST', body: JSON.stringify(log) }),
+  addFeed: (log: FeedLog) => request('/api/feeds', { method: 'POST', body: JSON.stringify(log) }),
+  addExcrete: (log: ExcreteLog) => request('/api/excretes', { method: 'POST', body: JSON.stringify(log) }),
   deleteLog: (id: string, kind: 'feed' | 'excrete') =>
     request('/api/logs', { method: 'DELETE', body: JSON.stringify({ id, kind }) }),
-  saveBaby: (baby: any) => request('/api/baby', { method: 'POST', body: JSON.stringify(baby) }),
+  deleteAll: () => request('/api/logs/all', { method: 'DELETE' }),
+  saveBaby: (baby: BabyProfile) => request('/api/baby', { method: 'POST', body: JSON.stringify(baby) }),
 }

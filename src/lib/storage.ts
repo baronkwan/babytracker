@@ -88,37 +88,4 @@ export function combineLogs(feeds: FeedLog[], excretes: ExcreteLog[]): LogEntry[
   )
 }
 
-export function exportCsv(feeds: FeedLog[], excretes: ExcreteLog[]): string {
-  const rows = [
-    ['kind', 'timestamp', 'type', 'volume_ml', 'duration_min', 'side', 'color', 'consistency', 'notes'],
-  ]
-  for (const f of feeds) {
-    rows.push([
-      'feed',
-      f.timestamp,
-      f.type,
-      String(f.volume || ''),
-      String(f.duration || ''),
-      f.side || '',
-      '',
-      '',
-      f.notes || '',
-    ])
-  }
-  for (const e of excretes) {
-    rows.push([
-      'excrete',
-      e.timestamp,
-      e.type,
-      '',
-      '',
-      '',
-      e.color || '',
-      e.consistency || '',
-      e.notes || '',
-    ])
-  }
-  return rows
-    .map((r) => r.map((c) => `"${String(c).replaceAll('"', '""')}"`).join(','))
-    .join('\n')
-}
+

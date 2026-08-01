@@ -1,6 +1,6 @@
 import { differenceInCalendarDays, format, formatDistanceToNowStrict, isToday, parseISO } from 'date-fns'
 import { zhTW } from 'date-fns/locale'
-import type { BabyProfile, ExcreteLog, FeedLog, LogEntry, Unit } from './types'
+import type { BabyProfile, ExcreteLog, FeedLog, Unit } from './types'
 
 export function dayKey(iso: string) {
   return iso.slice(0, 10)
@@ -23,10 +23,6 @@ export function ageLabel(dob: string) {
   return `${months} 個月大 · ${days} 天`
 }
 
-export function fmtTime(iso: string) {
-  return format(parseISO(iso), 'HH:mm')
-}
-
 export function fmtDateTime(iso: string) {
   const d = parseISO(iso)
   if (isToday(d)) return `今日 ${format(d, 'HH:mm')}`
@@ -44,11 +40,6 @@ export function fmtAgo(iso: string) {
 export function toDisplayVolume(ml: number, unit: Unit) {
   if (unit === 'oz') return Math.round((ml / 29.5735) * 10) / 10
   return Math.round(ml)
-}
-
-export function fromDisplayVolume(value: number, unit: Unit) {
-  if (unit === 'oz') return Math.round(value * 29.5735)
-  return Math.round(value)
 }
 
 export function unitLabel(unit: Unit) {
@@ -70,10 +61,6 @@ export function excreteLabel(type: ExcreteLog['type']) {
   if (type === 'wet') return '濕尿布'
   if (type === 'poop') return '大便'
   return '濕+便'
-}
-
-export function lastFeed(feeds: FeedLog[]) {
-  return feeds.slice().sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp))[0] || null
 }
 
 export function todayFeeds(feeds: FeedLog[]) {
@@ -137,14 +124,4 @@ export function lastNDaysKeys(n: number) {
   return keys
 }
 
-export function summarizeDay(logs: LogEntry[]) {
-  const feeds = logs.filter((l): l is FeedLog => l.kind === 'feed')
-  const ex = logs.filter((l): l is ExcreteLog => l.kind === 'excrete')
-  return {
-    feedCount: feeds.length,
-    volume: feeds.reduce((s, f) => s + (f.volume || 0), 0),
-    wet: ex.filter((e) => e.type === 'wet' || e.type === 'both').length,
-    poop: ex.filter((e) => e.type === 'poop' || e.type === 'both').length,
-    excreteCount: ex.length,
-  }
-}
+

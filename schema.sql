@@ -13,7 +13,10 @@ CREATE TABLE IF NOT EXISTS baby (
   id INTEGER PRIMARY KEY,
   name TEXT DEFAULT '寶寶',
   dob TEXT,
-  notes TEXT DEFAULT ''
+  notes TEXT DEFAULT '',
+  birth_weight INTEGER DEFAULT 0,
+  gender TEXT DEFAULT '',
+  unit TEXT DEFAULT 'ml'
 );
 
 CREATE TABLE IF NOT EXISTS feeds (

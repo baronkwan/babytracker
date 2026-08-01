@@ -58,6 +58,23 @@ async function requireAuth(req: Request, env: Env) {
   return verifyToken(token, env.JWT_SECRET)
 }
 
+// Self-healing schema: add baby profile columns if the table predates them.
+// ponytail: runs a PRAGMA per request — negligible, removes any manual migration step.
+async function ensureBabySchema(env: Env) {
+  const cols = await env.DB.prepare('PRAGMA table_info(baby)').all()
+  const names = new Set(cols.results.map((c: any) => c.name))
+  const adds: [string, string][] = [
+    ['birth_weight', 'INTEGER DEFAULT 0'],
+    ['gender', "TEXT DEFAULT ''"],
+    ['unit', "TEXT DEFAULT 'ml'"],
+  ]
+  for (const [name, def] of adds) {
+    if (!names.has(name)) {
+      await env.DB.prepare(`ALTER TABLE baby ADD COLUMN ${name} ${def}`).run()
+    }
+  }
+}
+
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
     const url = new URL(req.url)
@@ -103,6 +120,8 @@ export default {
     const username = await requireAuth(req, env)
     if (!username) return error('Unauthorized', 401)
 
+    await ensureBabySchema(env)
+
     // GET all data (shared)
     if (path === '/api/data' && req.method === 'GET') {
       const baby = await env.DB.prepare('SELECT * FROM baby WHERE id = 1').first()
@@ -144,11 +163,18 @@ export default {
       return json({ success: true })
     }
 
-    // Update baby profile (admin or any user)
+    // Clear all records
+    if (path === '/api/logs/all' && req.method === 'DELETE') {
+      await env.DB.prepare('DELETE FROM feeds').run()
+      await env.DB.prepare('DELETE FROM excretes').run()
+      return json({ success: true })
+    }
+
+    // Update baby profile
     if (path === '/api/baby' && req.method === 'POST') {
       const b = await req.json()
-      await env.DB.prepare('UPDATE baby SET name = ?, dob = ?, notes = ? WHERE id = 1')
-        .bind(b.name, b.dob, b.notes || '').run()
+      await env.DB.prepare('UPDATE baby SET name = ?, dob = ?, notes = ?, birth_weight = ?, gender = ?, unit = ? WHERE id = 1')
+        .bind(b.name, b.dob, b.notes || '', b.birthWeight || 0, b.gender || '', b.unit || 'ml').run()
       return json({ success: true })
     }
 

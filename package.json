@@ -9,7 +9,7 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "deploy:pages": "wrangler pages deploy dist",
-    "deploy:worker": "wrangler deploy"
+    "deploy:worker": "wrangler deploy -c wrangler.toml"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
@@ -19,7 +19,6 @@
     "lucide-react": "^1.26.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "sonner": "^2.0.7",
     "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
