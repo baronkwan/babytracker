@@ -940,7 +940,7 @@ function History({ allLogs, deleteLog, unit }: { allLogs: LogEntry[]; deleteLog:
 const PERIODS = [
   { id: '7d', label: '7天', days: 7, gap: 6, labelEvery: 1 },
   { id: '1m', label: '1月', days: 30, gap: 2, labelEvery: 5 },
-  { id: '3m', label: '3月', days: 90, gap: 1, labelEvery: 10 },
+  { id: '3m', label: '3月', days: 90, gap: 1, labelEvery: 15 },
 ] as const
 type PeriodId = (typeof PERIODS)[number]['id']
 
@@ -1047,7 +1047,7 @@ function BarChart({ labels, data, max, color, h, gap = 4, labelEvery = 1 }: { la
       </div>
       <div className="mt-1 flex" style={{ gap }}>
         {labels.map((l, i) => (
-          <div key={i} className="min-w-0 flex-1 truncate text-center text-[9px] leading-4 text-[var(--muted)]">
+          <div key={i} className="min-w-0 flex-1 whitespace-nowrap text-center text-[9px] leading-4 text-[var(--muted)]">
             {i % labelEvery === 0 ? l : ''}
           </div>
         ))}
