@@ -275,7 +275,7 @@ export default function App() {
           )}
           <main className="safe-pb flex-1 px-4 pt-3">
             {tab === 'home' && <Home baby={baby} feeds={feeds} excretes={excretes} weights={weights} allLogs={allLogs} deleteLog={deleteLog} setTab={setTab} addWeight={addWeight} />}
-            {tab === 'record' && <CombinedForm baby={baby} addFeed={addFeed} addExcrete={addExcrete} setTab={setTab} />}
+            {tab === 'record' && <CombinedForm baby={baby} feeds={feeds} excretes={excretes} addFeed={addFeed} addExcrete={addExcrete} setTab={setTab} />}
             {tab === 'history' && <History allLogs={allLogs} deleteLog={deleteLog} unit={baby.unit} />}
             {tab === 'charts' && <Charts feeds={feeds} excretes={excretes} weights={weights} unit={baby.unit} />}
           </main>
@@ -702,8 +702,10 @@ function Badge({ color, label }: { color: string; label: string }) {
 // ──────────────────────────────────────────────
 // RECORD FORM (feed + excrete combined)
 // ──────────────────────────────────────────────
-function CombinedForm({ baby, addFeed, addExcrete, setTab }: {
+function CombinedForm({ baby, feeds, excretes, addFeed, addExcrete, setTab }: {
   baby: BabyProfile
+  feeds: FeedLog[]
+  excretes: ExcreteLog[]
   addFeed: (f: FeedLog) => void
   addExcrete: (e: ExcreteLog) => void
   setTab: (t: TabId) => void
@@ -726,6 +728,8 @@ function CombinedForm({ baby, addFeed, addExcrete, setTab }: {
   // quick speech/text input
   const [speechInput, setSpeechInput] = useState('')
   const [parseErr, setParseErr] = useState(false)
+  const [parseMsg, setParseMsg] = useState('')
+  const [saveMsg, setSaveMsg] = useState('')
   const supportsSR = typeof window !== 'undefined' && !!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)
   const startListening = () => {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
@@ -744,6 +748,7 @@ function CombinedForm({ baby, addFeed, addExcrete, setTab }: {
     const nothing = r.breastVolume === 0 && r.formulaVolume === 0 && !r.excreteType && !r.color && !r.texture && !r.time
     if (nothing) {
       setParseErr(true)
+      setParseMsg('')
       return
     }
     setParseErr(false)
@@ -758,6 +763,14 @@ function CombinedForm({ baby, addFeed, addExcrete, setTab }: {
     if (r.texture) setTexture(r.texture)
     if (r.time) setTime(r.time)
     if (r.dayOffset !== 0) setDate(offsetDateKey(r.dayOffset))
+    const parts: string[] = []
+    if (r.breastVolume > 0) parts.push(`母乳 ${r.breastVolume}`)
+    if (r.formulaVolume > 0) parts.push(`配方奶 ${r.formulaVolume}`)
+    if (r.excreteType) parts.push(r.excreteType === 'both' ? '尿+便' : r.excreteType === 'wet' ? '淨尿' : '淨便')
+    if (r.time) parts.push(`時間 ${r.time}`)
+    if (r.color) parts.push(`顏色 ${r.color}`)
+    if (r.texture) parts.push(`質地 ${r.texture}`)
+    setParseMsg(parts.length ? `已填入：${parts.join(' · ')}` : '')
     setSpeechInput('')
   }
 
@@ -771,6 +784,21 @@ function CombinedForm({ baby, addFeed, addExcrete, setTab }: {
 
   const save = () => {
     const ts = toIsoFromLocal(date, time)
+    // Duplicate guard: the form's timestamps are minute-granular, so a fast
+    // re-record (e.g. two voice saves within the same minute) would otherwise
+    // create look-alike entries with identical timestamps and values.
+    const dupParts: string[] = []
+    if (hasFeed && feeds.some((f) => f.timestamp === ts && (f.breastVolume || 0) === bv && (f.formulaVolume || 0) === fv && (f.duration || 0) === dur)) {
+      dupParts.push('餵奶')
+    }
+    if (hasExcrete && excretes.some((e) => e.timestamp === ts && e.type === exType && e.peeSize === (showPee ? peeSize : '') && e.pooSize === (showPoo ? pooSize : '') && e.color === (showPoo ? color : '') && e.consistency === (showPoo ? texture : ''))) {
+      dupParts.push('排泄')
+    }
+    if (dupParts.length) {
+      setSaveMsg(`⚠️ 同時刻已有相同${dupParts.join('、')}記錄 — 已略過重複，改時間或內容即可儲存`)
+      return
+    }
+    setSaveMsg('')
     if (hasFeed) {
       addFeed({
         id: makeId(),
@@ -831,6 +859,7 @@ function CombinedForm({ baby, addFeed, addExcrete, setTab }: {
             </button>
           </div>
           {parseErr && <div className="mt-2 text-xs text-red-400">未辨識到內容，試下跟住下面嘅講法</div>}
+          {parseMsg && <div className="mt-2 text-xs text-[var(--teal)]">{parseMsg}</div>}
           <button onClick={() => setSpeechInput('今日 下午2點 70ml 母乳 30ml 配方奶 有尿有屎 黃色 軟')} className="mt-2 block text-left text-[10px] leading-relaxed text-[var(--muted)]">
             💡 推薦講法（撳即自動填）：「今日 下午2點 70ml 母乳 30ml 配方奶 有尿有屎 黃色 軟」
           </button>
@@ -964,6 +993,7 @@ function CombinedForm({ baby, addFeed, addExcrete, setTab }: {
         <button onClick={save} disabled={!hasFeed && !hasExcrete} className="btn-primary flex items-center justify-center gap-2">
           ✓ 儲存記錄
         </button>
+        {saveMsg && <div className="mt-2 text-center text-xs text-red-400">{saveMsg}</div>}
       </div>
     </div>
   )
