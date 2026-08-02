@@ -1,0 +1,8 @@
+# Cache policy: HTML must revalidate every load so new hashed bundles are
+# picked up immediately (prevents stale-cache complaints). Hashed assets
+# under /assets/ are immutable — safe to cache forever.
+/*
+  Cache-Control: no-cache, must-revalidate
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable

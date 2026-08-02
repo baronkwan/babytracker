@@ -1038,7 +1038,7 @@ function BarChart({ labels, data, max, color, h, gap = 4, labelEvery = 1 }: { la
         ))}
         <div className="absolute inset-0 flex items-end" style={{ gap }}>
           {data.map((v, i) => (
-            <div key={i} className="flex h-full flex-1 flex-col items-center justify-end">
+            <div key={i} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end">
               {showValues && v > 0 && <span className="mb-1 text-[9px] leading-none text-[var(--muted)]">{v}</span>}
               <div className="w-full rounded-t-[3px]" style={{ height: barPx(v), background: color, opacity: 0.85 }} />
             </div>
@@ -1047,7 +1047,7 @@ function BarChart({ labels, data, max, color, h, gap = 4, labelEvery = 1 }: { la
       </div>
       <div className="mt-1 flex" style={{ gap }}>
         {labels.map((l, i) => (
-          <div key={i} className="flex-1 text-center text-[9px] leading-4 text-[var(--muted)]">
+          <div key={i} className="min-w-0 flex-1 truncate text-center text-[9px] leading-4 text-[var(--muted)]">
             {i % labelEvery === 0 ? l : ''}
           </div>
         ))}
