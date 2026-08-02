@@ -976,21 +976,42 @@ function CombinedForm({ baby, addFeed, addExcrete, setTab }: {
 function History({ allLogs, deleteLog, unit }: { allLogs: LogEntry[]; deleteLog: (id: string, kind: 'feed' | 'excrete' | 'weight') => void; unit: Unit }) {
   const [filter, setFilter] = useState<'all' | 'feed' | 'excrete' | 'weight'>('all')
   const [search, setSearch] = useState('')
+  // date filter: '' = 全部, 'today' | 'yesterday' | '7d' presets, or a concrete 'YYYY-MM-DD'
+  const [dateFilter, setDateFilter] = useState('')
+
+  const dateRange = (() => {
+    if (!dateFilter) return null
+    if (dateFilter === 'today') return { from: todayKey(), to: todayKey() }
+    if (dateFilter === 'yesterday') return { from: offsetDateKey(-1), to: offsetDateKey(-1) }
+    if (dateFilter === '7d') return { from: offsetDateKey(-6), to: todayKey() }
+    return { from: dateFilter, to: dateFilter }
+  })()
 
   const filtered = allLogs.filter((log) => {
     if (filter === 'feed' && log.kind !== 'feed') return false
     if (filter === 'excrete' && log.kind !== 'excrete') return false
     if (filter === 'weight' && log.kind !== 'weight') return false
+    if (dateRange) {
+      const k = dayKey(log.timestamp)
+      if (k < dateRange.from || k > dateRange.to) return false
+    }
     if (search) {
-      const notes = log.kind === 'feed' ? log.notes || '' : log.notes || ''
+      const notes = log.notes || ''
       if (!notes.toLowerCase().includes(search.toLowerCase())) return false
     }
     return true
   })
 
+  const datePresets = [
+    { id: '', label: '全部' },
+    { id: 'today', label: '今日' },
+    { id: 'yesterday', label: '尋日' },
+    { id: '7d', label: '近7日' },
+  ] as const
+
   return (
     <div className="space-y-3 rise">
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         {(['all', 'feed', 'excrete', 'weight'] as const).map((f) => (
           <button
             key={f}
@@ -1001,12 +1022,31 @@ function History({ allLogs, deleteLog, unit }: { allLogs: LogEntry[]; deleteLog:
           </button>
         ))}
       </div>
+      <div className="flex flex-wrap items-center gap-2">
+        {datePresets.map((p) => (
+          <button
+            key={p.id}
+            onClick={() => setDateFilter(p.id)}
+            className={`chip text-xs ${dateFilter === p.id ? 'active' : ''}`}
+          >
+            {p.label}
+          </button>
+        ))}
+        <input
+          type="date"
+          value={/^\d{4}-\d{2}-\d{2}$/.test(dateFilter) ? dateFilter : ''}
+          max={todayLocal()}
+          onChange={(e) => setDateFilter(e.target.value || '')}
+          className="field h-8 min-w-0 flex-1 text-xs"
+        />
+      </div>
       <input
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         placeholder="搜尋備註..."
         className="field"
       />
+      <div className="text-xs text-[var(--muted)]">共 {filtered.length} 條記錄</div>
       <div className="group-list">
         {filtered.length === 0 && (
           <div className="p-6 text-center text-sm text-[var(--muted)]">沒有符合的記錄</div>
