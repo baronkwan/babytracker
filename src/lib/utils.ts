@@ -10,6 +10,36 @@ export function hourKey(iso: string) {
   return format(parseISO(iso), 'HH')
 }
 
+// Parse free-form speech/text into form fields, e.g.
+// "70ml 母乳 30ml 配方奶 有尿有屎" → breast 70, formula 30, excrete both.
+// Milk keywords pair with numbers in text order (first keyword ↔ first
+// number, etc.); time/count numbers (8點/3次) are filtered out.
+// Excrete is detected from 尿/屎/便 keywords, sizes from 少/多.
+export function parseSpeechText(text: string): {
+  breastVolume: number
+  formulaVolume: number
+  excreteType: 'wet' | 'poop' | 'both' | null
+  peeSize: string
+  pooSize: string
+} {
+  const s = text.toLowerCase()
+  const nums = [...s.matchAll(/(\d+(?:\.\d+)?)(?!\s*(?:點|時|分|次|日|天))/g)].map((m) => Number(m[1]))
+  const kwOrder = [...s.matchAll(/母乳|母奶|親餵|配方|奶粉/g)].map((m) => m[0])
+  const kwNum = (re: RegExp) => {
+    const i = kwOrder.findIndex((k) => re.test(k))
+    return i >= 0 && i < nums.length ? nums[i] : 0
+  }
+  const hasWet = /尿|pee/.test(s)
+  const hasPoo = /屎|便|poo/.test(s)
+  return {
+    breastVolume: kwNum(/母乳|母奶|親餵/),
+    formulaVolume: kwNum(/配方|奶粉/),
+    excreteType: hasWet && hasPoo ? 'both' : hasPoo ? 'poop' : hasWet ? 'wet' : null,
+    peeSize: /少(?:量)?尿/.test(s) ? '少' : /多(?:量)?尿/.test(s) ? '多' : '',
+    pooSize: /少(?:量)?[屎便]/.test(s) ? '少' : /多(?:量)?[屎便]/.test(s) ? '多' : '',
+  }
+}
+
 export function todayKey() {
   return format(new Date(), 'yyyy-MM-dd')
 }

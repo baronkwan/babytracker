@@ -12,6 +12,7 @@ import {
   hourKey,
   lastNDaysKeys,
   nowLocalTime,
+  parseSpeechText,
   sideLabel,
   todayExcretes,
   todayFeeds,
@@ -30,6 +31,7 @@ import {
   History as HistoryIcon,
   Home as HomeIcon,
   LogOut,
+  Mic,
   Milk,
   MoonStar,
   Settings,
@@ -720,6 +722,38 @@ function CombinedForm({ baby, addFeed, addExcrete, setTab }: {
   const [notes, setNotes] = useState('')
   const [date, setDate] = useState(todayLocal())
   const [time, setTime] = useState(nowLocalTime())
+  // quick speech/text input
+  const [speechInput, setSpeechInput] = useState('')
+  const [parseErr, setParseErr] = useState(false)
+  const supportsSR = typeof window !== 'undefined' && !!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)
+  const startListening = () => {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    const rec = new SR()
+    rec.lang = 'zh-HK'
+    rec.interimResults = false
+    rec.onresult = (e: any) => {
+      const t = e.results?.[0]?.[0]?.transcript || ''
+      if (t) setSpeechInput((p) => (p ? `${p}${t}` : t))
+    }
+    rec.onerror = () => {}
+    try { rec.start() } catch { /* unsupported */ }
+  }
+  const applyParse = () => {
+    const r = parseSpeechText(speechInput)
+    if (r.breastVolume === 0 && r.formulaVolume === 0 && !r.excreteType) {
+      setParseErr(true)
+      return
+    }
+    setParseErr(false)
+    if (r.breastVolume > 0) setBreast(String(r.breastVolume))
+    if (r.formulaVolume > 0) setFormula(String(r.formulaVolume))
+    if (r.excreteType) {
+      setExType(r.excreteType)
+      setPeeSize(r.peeSize)
+      setPooSize(r.pooSize)
+    }
+    setSpeechInput('')
+  }
 
   const bv = Number(breast) || 0
   const fv = Number(formula) || 0
@@ -765,6 +799,35 @@ function CombinedForm({ baby, addFeed, addExcrete, setTab }: {
   return (
     <div className="space-y-4 rise">
       <div className="card rounded-2xl p-4">
+        {/* Quick speech/text input */}
+        <div className="mb-5">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">快速輸入</span>
+          </div>
+          <div className="flex gap-2">
+            <input
+              value={speechInput}
+              onChange={(e) => setSpeechInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && applyParse()}
+              placeholder="例：70ml 母乳 30ml 配方奶 有尿有屎"
+              className="field min-w-0 flex-1"
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
+            />
+            {supportsSR && (
+              <button onClick={startListening} aria-label="語音輸入" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--surface2)] text-[var(--teal)] active:bg-[var(--surface)]">
+                <Mic size={18} />
+              </button>
+            )}
+            <button onClick={applyParse} className="shrink-0 rounded-xl bg-[var(--teal)] px-4 text-sm font-semibold text-white active:opacity-80">
+              解析
+            </button>
+          </div>
+          {parseErr && <div className="mt-2 text-xs text-red-400">未辨識到餵奶或排泄內容，試下：「60ml 母乳 有尿」</div>}
+          <div className="mt-2 text-[10px] text-[var(--muted)]">iPhone 撳鍵盤個 🎤 聽寫，講完再撳「解析」，填好 review 先儲存</div>
+        </div>
+
         {/* Time */}
         <div className="mb-5">
           <div className="mb-2 flex items-center justify-between">
