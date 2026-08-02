@@ -9,11 +9,13 @@ import {
   excreteLabel,
   fmtAgo,
   fmtDateTime,
+  hourKey,
   lastNDaysKeys,
   nowLocalTime,
   sideLabel,
   todayExcretes,
   todayFeeds,
+  todayKey,
   todayLocal,
   toDisplayVolume,
   toIsoFromLocal,
@@ -949,23 +951,31 @@ function History({ allLogs, deleteLog, unit }: { allLogs: LogEntry[]; deleteLog:
 // CHARTS
 // ──────────────────────────────────────────────
 const PERIODS = [
-  { id: '7d', label: '7天', days: 7, gap: 6, labelEvery: 1 },
-  { id: '1m', label: '1月', days: 30, gap: 2, labelEvery: 5 },
-  { id: '3m', label: '3月', days: 90, gap: 1, labelEvery: 15 },
+  { id: '1d', label: '1天', days: 1, gap: 4, labelEvery: 6, hourly: true },
+  { id: '7d', label: '7天', days: 7, gap: 6, labelEvery: 1, hourly: false },
+  { id: '1m', label: '1月', days: 30, gap: 2, labelEvery: 5, hourly: false },
+  { id: '3m', label: '3月', days: 90, gap: 1, labelEvery: 15, hourly: false },
 ] as const
 type PeriodId = (typeof PERIODS)[number]['id']
 
 function Charts({ feeds, excretes, weights, unit }: { feeds: FeedLog[]; excretes: ExcreteLog[]; weights: WeightLog[]; unit: Unit }) {
   const [period, setPeriod] = useState<PeriodId>('7d')
   const cfg = PERIODS.find((p) => p.id === period)!
-  const days = lastNDaysKeys(cfg.days)
-  const label = days.map((d) => d.slice(5))
+  // 1天 = hourly buckets for today; others = daily buckets.
+  const hourly = cfg.hourly
+  const buckets = hourly
+    ? Array.from({ length: 24 }, (_, i) => String(i).padStart(2, '0'))
+    : lastNDaysKeys(cfg.days)
+  const label = buckets.map((b) => (hourly ? `${b}時` : b.slice(5)))
+  const inBucket = (ts: string, b: string) =>
+    hourly ? dayKey(ts) === todayKey() && hourKey(ts) === b : dayKey(ts) === b
+  const periodLabel = hourly ? '今日' : `近${cfg.days}天`
 
-  const feedVol = days.map((d) =>
-    toDisplayVolume(feeds.filter((f) => dayKey(f.timestamp) === d).reduce((s, f) => s + (f.breastVolume || 0) + (f.formulaVolume || 0), 0), unit),
+  const feedVol = buckets.map((b) =>
+    toDisplayVolume(feeds.filter((f) => inBucket(f.timestamp, b)).reduce((s, f) => s + (f.breastVolume || 0) + (f.formulaVolume || 0), 0), unit),
   )
-  const excByDay = days.map((d) => {
-    const ex = excretes.filter((e) => dayKey(e.timestamp) === d)
+  const excByBucket = buckets.map((b) => {
+    const ex = excretes.filter((e) => inBucket(e.timestamp, b))
     return {
       wet: ex.filter((e) => e.type === 'wet' || e.type === 'both').length,
       poop: ex.filter((e) => e.type === 'poop' || e.type === 'both').length,
@@ -973,18 +983,18 @@ function Charts({ feeds, excretes, weights, unit }: { feeds: FeedLog[]; excretes
     }
   })
 
-  // Sparse weight entries → last weight of each day, forward-filled for a step trend.
+  // Sparse weight entries → last weight of each bucket, forward-filled for a step trend.
   let lastW = 0
-  const weightSeries = days.map((d) => {
-    const dayW = weights
-      .filter((w) => dayKey(w.timestamp) === d)
-      .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
-    if (dayW.length) lastW = dayW[dayW.length - 1].weight
+  const weightSeries = buckets.map((b) => {
+    const bw = weights
+      .filter((w) => inBucket(w.timestamp, b))
+      .sort((a, b2) => a.timestamp.localeCompare(b2.timestamp))
+    if (bw.length) lastW = bw[bw.length - 1].weight
     return lastW
   })
 
   const maxVol = Math.max(...feedVol, 1)
-  const maxEx = Math.max(...excByDay.map((d) => d.total), 1)
+  const maxEx = Math.max(...excByBucket.map((d) => d.total), 1)
   const maxW = Math.max(...weightSeries, 1)
   const CHART_H = 160
 
@@ -1002,7 +1012,7 @@ function Charts({ feeds, excretes, weights, unit }: { feeds: FeedLog[]; excretes
       <div className="card rounded-2xl p-4">
         <div className="mb-3 flex items-center justify-between">
           <span className="text-sm font-semibold">餵奶量趨勢</span>
-          <span className="text-xs text-[var(--muted)]">近{cfg.days}天 · {unitLabel(unit)}/日</span>
+          <span className="text-xs text-[var(--muted)]">{periodLabel} · {unitLabel(unit)}/日</span>
         </div>
         <BarChart labels={label} data={feedVol} max={maxVol} color="var(--teal)" h={CHART_H} gap={cfg.gap} labelEvery={cfg.labelEvery} />
       </div>
@@ -1011,16 +1021,16 @@ function Charts({ feeds, excretes, weights, unit }: { feeds: FeedLog[]; excretes
       <div className="card rounded-2xl p-4">
         <div className="mb-3 flex items-center justify-between">
           <span className="text-sm font-semibold">排泄頻率</span>
-          <span className="text-xs text-[var(--muted)]">近{cfg.days}天 · 次/日</span>
+          <span className="text-xs text-[var(--muted)]">{periodLabel} · 次/日</span>
         </div>
-        <BarChart labels={label} data={excByDay.map((d) => d.total)} max={maxEx} color="var(--pink)" h={CHART_H} gap={cfg.gap} labelEvery={cfg.labelEvery} />
+        <BarChart labels={label} data={excByBucket.map((d) => d.total)} max={maxEx} color="var(--pink)" h={CHART_H} gap={cfg.gap} labelEvery={cfg.labelEvery} />
       </div>
 
       {/* Weight chart */}
       <div className="card rounded-2xl p-4">
         <div className="mb-3 flex items-center justify-between">
           <span className="text-sm font-semibold">體重趨勢</span>
-          <span className="text-xs text-[var(--muted)]">近{cfg.days}天 · g</span>
+          <span className="text-xs text-[var(--muted)]">{periodLabel} · g</span>
         </div>
         <BarChart labels={label} data={weightSeries} max={maxW} color="var(--blue)" h={CHART_H} gap={cfg.gap} labelEvery={cfg.labelEvery} />
       </div>

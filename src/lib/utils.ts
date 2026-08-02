@@ -6,6 +6,10 @@ export function dayKey(iso: string) {
   return format(parseISO(iso), 'yyyy-MM-dd')
 }
 
+export function hourKey(iso: string) {
+  return format(parseISO(iso), 'HH')
+}
+
 export function todayKey() {
   return format(new Date(), 'yyyy-MM-dd')
 }
