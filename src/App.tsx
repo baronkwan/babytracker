@@ -1014,7 +1014,7 @@ function Charts({ feeds, excretes, weights, unit }: { feeds: FeedLog[]; excretes
           <span className="text-sm font-semibold">餵奶量趨勢</span>
           <span className="text-xs text-[var(--muted)]">{periodLabel} · {unitLabel(unit)}/日</span>
         </div>
-        <BarChart labels={label} data={feedVol} max={maxVol} color="var(--teal)" h={CHART_H} gap={cfg.gap} labelEvery={cfg.labelEvery} />
+        <BarChart labels={label} data={feedVol} max={maxVol} color="var(--teal)" h={CHART_H} gap={cfg.gap} labelEvery={cfg.labelEvery} unit={unitLabel(unit)} />
       </div>
 
       {/* Excrete chart */}
@@ -1023,7 +1023,7 @@ function Charts({ feeds, excretes, weights, unit }: { feeds: FeedLog[]; excretes
           <span className="text-sm font-semibold">排泄頻率</span>
           <span className="text-xs text-[var(--muted)]">{periodLabel} · 次/日</span>
         </div>
-        <BarChart labels={label} data={excByBucket.map((d) => d.total)} max={maxEx} color="var(--pink)" h={CHART_H} gap={cfg.gap} labelEvery={cfg.labelEvery} />
+        <BarChart labels={label} data={excByBucket.map((d) => d.total)} max={maxEx} color="var(--pink)" h={CHART_H} gap={cfg.gap} labelEvery={cfg.labelEvery} unit="次" />
       </div>
 
       {/* Weight chart */}
@@ -1032,7 +1032,7 @@ function Charts({ feeds, excretes, weights, unit }: { feeds: FeedLog[]; excretes
           <span className="text-sm font-semibold">體重趨勢</span>
           <span className="text-xs text-[var(--muted)]">{periodLabel} · g</span>
         </div>
-        <BarChart labels={label} data={weightSeries} max={maxW} color="var(--blue)" h={CHART_H} gap={cfg.gap} labelEvery={cfg.labelEvery} />
+        <BarChart labels={label} data={weightSeries} max={maxW} color="var(--blue)" h={CHART_H} gap={cfg.gap} labelEvery={cfg.labelEvery} unit="g" />
       </div>
 
       <div className="text-center text-xs text-[var(--muted)]">數據僅供參考 · 如有異常請即時聯絡醫生</div>
@@ -1040,24 +1040,47 @@ function Charts({ feeds, excretes, weights, unit }: { feeds: FeedLog[]; excretes
   )
 }
 
-function BarChart({ labels, data, max, color, h, gap = 4, labelEvery = 1 }: { labels: string[]; data: number[]; max: number; color: string; h: number; gap?: number; labelEvery?: number }) {
+// Round a max value up to a clean axis ceiling (137 → 200, 2870 → 3000).
+function axisMax(v: number) {
+  if (v <= 0) return 1
+  const mag = Math.pow(10, Math.floor(Math.log10(v)))
+  return Math.ceil(v / mag) * mag
+}
+
+function BarChart({ labels, data, max, color, h, gap = 4, labelEvery = 1, unit = '' }: { labels: string[]; data: number[]; max: number; color: string; h: number; gap?: number; labelEvery?: number; unit?: string }) {
   // Responsive flex bars: flex-1 fills the container, so every period fits with no
   // horizontal scroll — bars just get narrower as the day count grows.
   const chartH = h - 24
   const showValues = data.length <= 14
-  const barPx = (v: number) => (max > 0 ? Math.max((v / max) * (chartH - 14), v > 0 ? 2 : 0) : 0)
+  const aMax = axisMax(max)
+  const barPx = (v: number) => (aMax > 0 ? Math.max((v / aMax) * (chartH - 14), v > 0 ? 2 : 0) : 0)
+  const AXIS_W = 36
+  const ticks = [
+    { frac: 0, label: '0' },
+    { frac: 0.5, label: String(Math.round(aMax / 2)) },
+    { frac: 1, label: `${aMax}${unit}` },
+  ]
 
   return (
     <div>
       <div className="relative" style={{ height: chartH }}>
+        {ticks.map((t) => (
+          <div
+            key={`t${t.frac}`}
+            className="absolute text-right text-[9px] leading-none text-[var(--muted)]"
+            style={{ bottom: t.frac * (chartH - 14), left: 0, width: AXIS_W - 8, transform: 'translateY(-50%)' }}
+          >
+            {t.label}
+          </div>
+        ))}
         {[0, 0.5, 1].map((frac) => (
           <div
-            key={frac}
-            className="pointer-events-none absolute left-0 right-0 border-t border-dashed border-[var(--border)]"
-            style={{ bottom: frac * (chartH - 14) }}
+            key={`g${frac}`}
+            className="pointer-events-none absolute border-t border-dashed border-[var(--border)]"
+            style={{ bottom: frac * (chartH - 14), left: AXIS_W, right: 0 }}
           />
         ))}
-        <div className="absolute inset-0 flex items-end" style={{ gap }}>
+        <div className="absolute bottom-0 top-0 flex items-end" style={{ left: AXIS_W, right: 0, gap }}>
           {data.map((v, i) => (
             <div key={i} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end">
               {showValues && v > 0 && <span className="mb-1 text-[9px] leading-none text-[var(--muted)]">{v}</span>}
@@ -1066,7 +1089,7 @@ function BarChart({ labels, data, max, color, h, gap = 4, labelEvery = 1 }: { la
           ))}
         </div>
       </div>
-      <div className="mt-1 flex" style={{ gap }}>
+      <div className="mt-1 flex" style={{ marginLeft: AXIS_W, gap }}>
         {labels.map((l, i) => (
           <div key={i} className="min-w-0 flex-1 whitespace-nowrap text-center text-[9px] leading-4 text-[var(--muted)]">
             {i % labelEvery === 0 ? l : ''}
