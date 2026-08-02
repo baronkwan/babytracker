@@ -6,6 +6,7 @@ const KEYS = {
   feeds: 'babytracker_v2_feeds',
   excretes: 'babytracker_v2_excretes',
   weights: 'babytracker_v2_weights',
+  deleted: 'babytracker_v2_deleted',
   // legacy keys from the old single-file app
   oldBaby: 'baby_profile',
   oldFeeds: 'baby_feeds',
@@ -106,6 +107,17 @@ export function loadExcretes(): ExcreteLog[] {
 export function loadWeights(): WeightLog[] {
   const v2 = safeParse<unknown[]>(localStorage.getItem(KEYS.weights), [])
   return v2.map((x) => normalizeWeight(x as Record<string, unknown>))
+}
+
+// Tombstones: ids the user deliberately deleted. They must never be
+// backfilled to the server again, or a delete would be resurrected by
+// the local→server sync on the next refresh.
+export function loadDeletedIds(): string[] {
+  return safeParse<string[]>(localStorage.getItem(KEYS.deleted), [])
+}
+
+export function saveDeletedIds(ids: string[]) {
+  localStorage.setItem(KEYS.deleted, JSON.stringify(ids))
 }
 
 export function saveAll(baby: BabyProfile, feeds: FeedLog[], excretes: ExcreteLog[], weights: WeightLog[]) {

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { BabyProfile, ExcreteLog, FeedLog, LogEntry, TabId, Unit, WeightLog } from './lib/types'
 import { DEFAULT_BABY, DURATION_CHIPS, POOP_COLORS, POOP_TEXTURES } from './lib/types'
-import { combineLogs, loadBaby, loadExcretes, loadFeeds, loadWeights, makeId, saveAll } from './lib/storage'
+import { combineLogs, loadBaby, loadDeletedIds, loadExcretes, loadFeeds, loadWeights, makeId, saveAll, saveDeletedIds } from './lib/storage'
 import {
   ageLabel,
   buildDoctorText,
@@ -168,21 +168,24 @@ export default function App() {
     const sw = (data.weights ?? []).map(toWeight)
     // Backfill: push local-only rows (offline / failed push / pre-sync data) up to the server.
     // Fire-and-forget; a rejected push surfaces the banner once the promise settles.
+    // Rows the user deleted are tombstoned and never backfilled (otherwise a
+    // server-side delete would be resurrected by the next refresh).
+    const deletedSet = new Set(loadDeletedIds())
     const serverFeedIds = new Set(sf.map((f) => f.id))
     const serverExcreteIds = new Set(se.map((e) => e.id))
     const serverWeightIds = new Set(sw.map((w) => w.id))
     for (const f of localFeeds) {
-      if (!serverFeedIds.has(f.id)) api.addFeed(f).catch(() => setSyncError('⚠️ 部分本機記錄未能上傳，將於下次同步重試'))
+      if (!serverFeedIds.has(f.id) && !deletedSet.has(f.id)) api.addFeed(f).catch(() => setSyncError('⚠️ 部分本機記錄未能上傳，將於下次同步重試'))
     }
     for (const e of localExcretes) {
-      if (!serverExcreteIds.has(e.id)) api.addExcrete(e).catch(() => setSyncError('⚠️ 部分本機記錄未能上傳，將於下次同步重試'))
+      if (!serverExcreteIds.has(e.id) && !deletedSet.has(e.id)) api.addExcrete(e).catch(() => setSyncError('⚠️ 部分本機記錄未能上傳，將於下次同步重試'))
     }
     for (const w of localWeights) {
-      if (!serverWeightIds.has(w.id)) api.addWeight(w).catch(() => setSyncError('⚠️ 部分本機記錄未能上傳，將於下次同步重試'))
+      if (!serverWeightIds.has(w.id) && !deletedSet.has(w.id)) api.addWeight(w).catch(() => setSyncError('⚠️ 部分本機記錄未能上傳，將於下次同步重試'))
     }
-    const mf = mergeById(localFeeds, sf)
-    const me = mergeById(localExcretes, se)
-    const mw = mergeById(localWeights, sw)
+    const mf = mergeById(localFeeds.filter((f) => !deletedSet.has(f.id)), sf)
+    const me = mergeById(localExcretes.filter((e) => !deletedSet.has(e.id)), se)
+    const mw = mergeById(localWeights.filter((w) => !deletedSet.has(w.id)), sw)
     setBaby(baby)
     setFeeds(mf)
     setExcretes(me)
@@ -245,6 +248,9 @@ export default function App() {
       if (kind === 'feed') setFeeds((prev) => prev.filter((x) => x.id !== id))
       else if (kind === 'excrete') setExcretes((prev) => prev.filter((x) => x.id !== id))
       else setWeights((prev) => prev.filter((x) => x.id !== id))
+      // Tombstone so the next sync never backfills this row again.
+      const deleted = loadDeletedIds()
+      if (!deleted.includes(id)) saveDeletedIds([...deleted, id])
       push(() => api.deleteLog(id, kind))
     },
     [push],
