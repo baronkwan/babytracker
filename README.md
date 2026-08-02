@@ -1,107 +1,127 @@
-# BabyLog v3 — Cloud Sync + Auth + PWA
+# BabyLog — 嬰兒記錄 App / Baby Tracking App
 
-React + Vite + Tailwind + Cloudflare Pages + Worker + D1
+A family baby tracker with real-time cloud sync — feeds, excretes, and weight in one place.
+家庭共用嘅嬰兒記錄 App：餵奶、排泄、體重，一頁搞掂，多裝置即時同步。
 
-## 功能
-- 餵奶 / 排泄記錄（母乳 vs 配方奶、左/右/兩邊、顏色質地）
-- 即時雲端同步（多裝置、多用戶共用同一份資料）
-- Admin 專屬建立帳號（無自註冊）
-- JWT 登入（7 天有效）
-- PWA 可安裝到 iPhone 主畫面
-- 醫生報告一鍵生成 + 複製
-- 深色主題 + Mobile-first
+**Stack:** React 19 + Vite + TypeScript + Tailwind 4 · Cloudflare Pages + Worker + D1 · JWT auth · PWA · Bun
 
-## 技術棧
-- Frontend: React 19 + Vite + TS + Tailwind 4 + vite-plugin-pwa
-- Backend: Cloudflare Worker + D1（SQLite）
-- Auth: bcryptjs + jose (HS256 JWT)
-- Hosting: Cloudflare Pages（前端）+ Worker（API）
+---
 
-## 本地開發
+## Features / 功能
+
+- **Combined record form** — feed + excrete in one page, saved together (same timestamp) / **合併記錄表單** — 餵奶同排泄一頁搞掂，一次過儲存
+- **Split milk volumes** — breast + formula entered separately, default 0 each / **母乳 + 配方奶分開計**，唔填就係 0
+- **Excrete options** — pee-only / poo-only / both, with size (少/多) / **淨尿 / 淨便 / 尿+便**，可選尿量便量
+- **Weight tracking** — log weight, see trend chart / **體重記錄** + 趨勢圖
+- **Backdating** — record can be back-dated with native date/time picker / 記錄可以**補番日期時間**
+- **Real-time cloud sync** — multi-device, multi-user share the same data / 多裝置、多用戶**即時雲端同步**
+- **JWT auth** — login (7-day token), admin creates accounts (no self-signup) / JWT 登入，admin 先可以建立帳號
+- **Doctor report** — one-tap summary, copy to clipboard / **醫生報告**一鍵生成 + 複製
+- **Charts** — 7d / 1m / 3m, responsive (no horizontal scroll) / 圖表三個時段，響應式設計
+- **PWA** — installable to home screen / 可安裝到主畫面
+- **Dark mode** + mobile-first / 深色主題 + 手機優先
+
+## Tech Stack / 技術棧
+
+| Layer | Tech |
+|-------|------|
+| Frontend | React 19 + Vite + TypeScript + Tailwind 4 (vite-plugin-pwa) |
+| Backend | Cloudflare Worker + D1 (SQLite) |
+| Auth | bcryptjs + jose (HS256 JWT) |
+| Hosting | Cloudflare Pages (frontend) + Worker (API) |
+| Package manager | Bun (npm works too) |
+
+## Project Structure / 目錄結構
+
+```
+├── src/               # Frontend (React)
+│   ├── lib/           # types, storage (localStorage), utils, api client
+│   └── App.tsx        # Main app (tabs, forms, charts, modals)
+├── worker/            # Cloudflare Worker API (auth + D1 CRUD)
+├── schema.sql         # D1 schema (fresh installs)
+├── public/_headers    # Cache policy (HTML no-cache, assets immutable)
+├── wrangler.toml      # Worker + D1 binding config
+└── .env.example       # Frontend env template
+```
+
+## Database / 資料庫
+
+Tables: `users`, `baby` (singleton), `feeds`, `excretes`, `weights`.
+
+- Logs reference `users(id)` via `user_id` (FK, added by auto-migration)
+- **Self-healing schema**: the worker checks table columns on each request and migrates automatically (rebuilds in an atomic D1 batch) — no manual migration steps
+- `schema.sql` is only needed for a fresh database
+
+## Local Development / 本地開發
 
 ```bash
-npm install
-npm run dev          # http://localhost:5180
+bun install
+
+# 1. API (Cloudflare Worker, local D1)
+bunx wrangler dev -c wrangler.toml --local --var JWT_SECRET:devsecret --var ADMIN_KEY:devkey
+# → http://localhost:8787
+
+# 2. Frontend (point to local API)
+VITE_API_BASE=http://localhost:8787 bun run dev
+# → http://localhost:5173
 ```
 
-## Cloudflare 部署流程（完整）
+## Deployment / 部署
 
-### 1. 建立 D1 Database
-1. 登入 Cloudflare Dashboard
-2. Workers & Pages → D1 SQL Database → Create database
-3. 名稱填 `babylog`
-4. 建立後複製 **Database ID**
+### 1. D1 database
+Create a D1 database in the Cloudflare dashboard, then put its ID in `wrangler.toml` → `database_id`.
 
-### 2. 建立 Worker Secrets
+### 2. Worker secrets
 ```bash
-wrangler secret put JWT_SECRET
-# 輸入一串長隨機字串（例如用 openssl rand -base64 32）
-
-wrangler secret put ADMIN_KEY
-# 輸入你自訂的管理員金鑰（建立帳號時要用）
+bunx wrangler secret put JWT_SECRET   # e.g. openssl rand -base64 32
+bunx wrangler secret put ADMIN_KEY    # your admin key (needed to create accounts)
 ```
 
-### 3. 更新 wrangler.toml
-把 `database_id` 填上你剛建立的 D1 ID。
-
-### 4. 初始化 D1 表結構
+### 3. Init schema (fresh database only)
 ```bash
-wrangler d1 execute babylog --file=schema.sql
+bunx wrangler d1 execute babylog --remote --file=schema.sql
 ```
 
-### 5. Deploy Worker（API）
+### 4. Deploy Worker (API)
 ```bash
-npm run deploy:worker
-```
-記下 Worker 的 URL（例如 `https://babylog-api.xxx.workers.dev`）
-
-### 6. 設定前端環境變數
-複製 `.env.example` 為 `.env`：
-```env
-VITE_API_BASE=https://babylog-api.xxx.workers.dev
+bun run deploy:worker
 ```
 
-### 7. Deploy Frontend（Pages）
+### 5. Deploy Frontend (Pages)
 ```bash
-npm run build
-npm run deploy:pages
+cp .env.example .env   # set VITE_API_BASE to your worker URL
+bun run build
+bun run deploy:pages   # deploys to the production branch ('production')
 ```
 
-或直接在 Cloudflare Dashboard 連接 Git repo 自動部署。
+> ⚠️ **Production branch quirk**: this Pages project's production branch is `production`, not the git default. `deploy:pages` already passes `--branch production` — don't remove it.
 
-### 8. 建立第一個 Admin 帳號
-用 Postman / curl / 瀏覽器：
-
+### 6. Create the first admin account
 ```http
-POST https://babylog-api.xxx.workers.dev/api/admin/create-user
+POST https://<your-worker>.workers.dev/api/admin/create-user
 Content-Type: application/json
 
 {
   "username": "admin",
   "password": "yourpassword",
-  "admin_key": "你剛設的 ADMIN_KEY"
+  "admin_key": "<your ADMIN_KEY>"
 }
 ```
+Other users are created by the admin from the login screen.
 
-之後其他用戶都由 admin 建立。
+## Usage / 使用流程
 
-## 使用流程
-1. 打開 Pages URL
-2. 輸入帳號密碼登入
-3. 所有用戶看到同一份寶寶記錄
-4. 新增/刪除即時同步到雲端
+1. Open the Pages URL / 打開 Pages URL
+2. Log in with username + password / 輸入帳號密碼登入
+3. Everyone sees the same shared baby records (family model) / 所有用戶睇到同一份記錄（家庭共用）
+4. Add/delete syncs to the cloud instantly / 新增刪除即時同步
 
-## 注意事項
-- 目前所有登入用戶共用同一份資料（適合家庭使用）
-- 如需每用戶獨立資料，後續可再擴充
-- PWA 安裝：Safari → 分享 → 「加入主畫面」
+## Notes / 注意事項
+
+- All users share one dataset — suitable for family use / 目前所有用戶共用同一份資料，適合家庭使用
+- PWA install: Safari → Share → "Add to Home Screen" / PWA 安裝：Safari → 分享 → 加入主畫面
+- Cache: `index.html` is served `no-cache` so new releases appear immediately; hashed assets are immutable / `index.html` 唔會 cache，出新版即刻見；assets 用 hash 長 cache
 
 ---
 
-需要你提供的資訊（等上面步驟做到時再告訴我）：
-- D1 Database ID
-- Worker 實際 URL（deploy 後）
-- 你想用的 admin username / password（我可以幫你產生建立指令）
-- Pages project 名稱（如要用 Git 部署）
-
-繼續寫前端登入整合？還是先停在這裡等你 Cloudflare 資源？
+Built for Ayla 🎀
