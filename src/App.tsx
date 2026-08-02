@@ -889,14 +889,12 @@ function CombinedForm({ baby, feeds, excretes, editLog, onEditDone, addFeed, add
     // re-record (e.g. two voice saves within the same minute) would otherwise
     // create look-alike entries with identical timestamps and values.
     const dupParts: string[] = []
-    if (hasFeed && feeds.some((f) => f.timestamp === ts && (f.breastVolume || 0) === bv && (f.formulaVolume || 0) === fv && (f.duration || 0) === dur)) {
-      dupParts.push('餵奶')
-    }
-    if (hasExcrete && excretes.some((e) => e.timestamp === ts && e.type === exType && e.peeSize === (showPee ? peeSize : '') && e.pooSize === (showPoo ? pooSize : '') && e.color === (showPoo ? color : '') && e.consistency === (showPoo ? texture : ''))) {
-      dupParts.push('排泄')
-    }
+    const dupFeed = hasFeed && feeds.find((f) => f.timestamp === ts && (f.breastVolume || 0) === bv && (f.formulaVolume || 0) === fv && (f.duration || 0) === dur)
+    const dupExcrete = hasExcrete && excretes.find((e) => e.timestamp === ts && e.type === exType && e.peeSize === (showPee ? peeSize : '') && e.pooSize === (showPoo ? pooSize : '') && e.color === (showPoo ? color : '') && e.consistency === (showPoo ? texture : ''))
+    if (dupFeed) dupParts.push('餵奶')
+    if (dupExcrete) dupParts.push('排泄')
     if (dupParts.length) {
-      setSaveMsg(`⚠️ 同時刻已有相同${dupParts.join('、')}記錄 — 已略過重複，改時間或內容即可儲存`)
+      setSaveMsg(`⚠️ ${fmtDateTime(ts)} 已存在相同${dupParts.join('、')}記錄 — 已略過重複。可去歷史頁刪除該記錄，或改時間/內容後再儲存`)
       return
     }
     setSaveMsg('')
@@ -1312,7 +1310,7 @@ function Charts({ feeds, excretes, weights, unit }: { feeds: FeedLog[]; excretes
           </div>
         </div>
         <div className="mb-2 text-xs text-[var(--muted)]">{periodLabel} · {unitLabel(unit)}/日</div>
-        <BarChart labels={label} data={feedVol} max={maxVol} color="var(--teal)" h={CHART_H} gap={cfg.gap} labelEvery={cfg.labelEvery} unit={unitLabel(unit)} stack={[{ data: formulaVol, color: '#f59e0b' }]} />
+        <BarChart labels={label} data={breastVol} max={maxVol} color="var(--teal)" h={CHART_H} gap={cfg.gap} labelEvery={cfg.labelEvery} unit={unitLabel(unit)} stack={[{ data: formulaVol, color: '#f59e0b' }]} />
       </div>
 
       {/* Excrete chart */}
@@ -1379,11 +1377,14 @@ function BarChart({ labels, data, max, color, h, gap = 4, labelEvery = 1, unit =
           />
         ))}
         <div className="absolute bottom-0 top-0 flex items-end" style={{ left: AXIS_W, right: 0, gap }}>
-          {data.map((v, i) => (
+          {data.map((v, i) => {
+            const stackTotal = stack ? stack.reduce((s, st) => s + (st.data[i] || 0), 0) : 0
+            const displayVal = stack && stack.length > 0 ? v + stackTotal : v
+            return (
             <div key={i} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end">
-              {showValues && v > 0 && <span className="mb-1 text-[9px] leading-none text-[var(--muted)]">{v}</span>}
+              {showValues && displayVal > 0 && <span className="mb-1 text-[9px] leading-none text-[var(--muted)]">{displayVal}</span>}
               {stack && stack.length > 0 ? (
-                <div className="flex w-full flex-col-reverse" style={{ height: Math.max(barPx(v), 1) }}>
+                <div className="flex w-full flex-col-reverse" style={{ height: Math.max(barPx(displayVal), 1) }}>
                   {[v, ...stack.map((s) => s.data[i])].map((seg, si) => {
                     const segH = Math.max(barPx(seg), seg > 0 ? 2 : 0)
                     if (segH <= 0) return null
@@ -1396,7 +1397,8 @@ function BarChart({ labels, data, max, color, h, gap = 4, labelEvery = 1, unit =
                 <div className="w-full rounded-t-[3px]" style={{ height: barPx(v), background: color, opacity: 0.85 }} />
               )}
             </div>
-          ))}
+            )
+          })}
         </div>
       </div>
       <div className="mt-1 flex" style={{ marginLeft: AXIS_W, gap }}>
