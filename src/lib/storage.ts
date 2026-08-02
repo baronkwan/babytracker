@@ -1,10 +1,11 @@
-import type { BabyProfile, ExcreteLog, FeedLog, LogEntry } from './types'
+import type { BabyProfile, ExcreteLog, FeedLog, LogEntry, WeightLog } from './types'
 import { DEFAULT_BABY } from './types'
 
 const KEYS = {
   baby: 'babylog_v2_profile',
   feeds: 'babylog_v2_feeds',
   excretes: 'babylog_v2_excretes',
+  weights: 'babylog_v2_weights',
   // migrate from old single-file app keys if present
   oldBaby: 'baby_profile',
   oldFeeds: 'baby_feeds',
@@ -50,6 +51,16 @@ function normalizeExcrete(raw: Record<string, unknown>): ExcreteLog {
   }
 }
 
+function normalizeWeight(raw: Record<string, unknown>): WeightLog {
+  return {
+    id: String(raw.id ?? uid()),
+    kind: 'weight',
+    timestamp: String(raw.timestamp ?? new Date().toISOString()),
+    weight: Number(raw.weight) || 0,
+    notes: String(raw.notes ?? ''),
+  }
+}
+
 export function loadBaby(): BabyProfile {
   const v2 = safeParse<BabyProfile | null>(localStorage.getItem(KEYS.baby), null)
   if (v2) return { ...DEFAULT_BABY, ...v2 }
@@ -72,20 +83,24 @@ export function loadExcretes(): ExcreteLog[] {
   return old.map((x) => normalizeExcrete(x as Record<string, unknown>))
 }
 
-export function saveAll(baby: BabyProfile, feeds: FeedLog[], excretes: ExcreteLog[]) {
+export function loadWeights(): WeightLog[] {
+  const v2 = safeParse<unknown[]>(localStorage.getItem(KEYS.weights), [])
+  return v2.map((x) => normalizeWeight(x as Record<string, unknown>))
+}
+
+export function saveAll(baby: BabyProfile, feeds: FeedLog[], excretes: ExcreteLog[], weights: WeightLog[]) {
   localStorage.setItem(KEYS.baby, JSON.stringify(baby))
   localStorage.setItem(KEYS.feeds, JSON.stringify(feeds))
   localStorage.setItem(KEYS.excretes, JSON.stringify(excretes))
+  localStorage.setItem(KEYS.weights, JSON.stringify(weights))
 }
 
 export function makeId() {
   return uid()
 }
 
-export function combineLogs(feeds: FeedLog[], excretes: ExcreteLog[]): LogEntry[] {
-  return [...feeds, ...excretes].sort(
+export function combineLogs(feeds: FeedLog[], excretes: ExcreteLog[], weights: WeightLog[]): LogEntry[] {
+  return [...feeds, ...excretes, ...weights].sort(
     (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
   )
 }
-
-

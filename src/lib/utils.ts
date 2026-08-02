@@ -3,11 +3,24 @@ import { zhTW } from 'date-fns/locale'
 import type { BabyProfile, ExcreteLog, FeedLog, Unit } from './types'
 
 export function dayKey(iso: string) {
-  return iso.slice(0, 10)
+  return format(parseISO(iso), 'yyyy-MM-dd')
 }
 
 export function todayKey() {
-  return new Date().toISOString().slice(0, 10)
+  return format(new Date(), 'yyyy-MM-dd')
+}
+
+export function todayLocal() {
+  return format(new Date(), 'yyyy-MM-dd')
+}
+
+export function nowLocalTime() {
+  return format(new Date(), 'HH:mm')
+}
+
+export function toIsoFromLocal(date: string, time: string) {
+  const d = new Date(`${date || todayLocal()}T${time || '00:00'}`)
+  return Number.isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString()
 }
 
 export function ageLabel(dob: string) {
@@ -119,7 +132,7 @@ export function lastNDaysKeys(n: number) {
   for (let i = n - 1; i >= 0; i--) {
     const d = new Date(now)
     d.setDate(now.getDate() - i)
-    keys.push(d.toISOString().slice(0, 10))
+    keys.push(format(d, 'yyyy-MM-dd'))
   }
   return keys
 }

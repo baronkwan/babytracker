@@ -1,4 +1,4 @@
-import type { BabyProfile, ExcreteLog, FeedLog } from './types'
+import type { BabyProfile, ExcreteLog, FeedLog, WeightLog } from './types'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'https://babylog-api.baronjetso.workers.dev'
 
@@ -22,6 +22,7 @@ export interface ApiData {
   baby: Record<string, unknown> | null
   feeds: Record<string, unknown>[]
   excretes: Record<string, unknown>[]
+  weights: Record<string, unknown>[]
 }
 
 async function request<T = any>(path: string, options: RequestInit = {}): Promise<T> {
@@ -57,7 +58,8 @@ export const api = {
 
   addFeed: (log: FeedLog) => request('/api/feeds', { method: 'POST', body: JSON.stringify(log) }),
   addExcrete: (log: ExcreteLog) => request('/api/excretes', { method: 'POST', body: JSON.stringify(log) }),
-  deleteLog: (id: string, kind: 'feed' | 'excrete') =>
+  addWeight: (log: WeightLog) => request('/api/weights', { method: 'POST', body: JSON.stringify(log) }),
+  deleteLog: (id: string, kind: 'feed' | 'excrete' | 'weight') =>
     request('/api/logs', { method: 'DELETE', body: JSON.stringify({ id, kind }) }),
   deleteAll: () => request('/api/logs/all', { method: 'DELETE' }),
   saveBaby: (baby: BabyProfile) => request('/api/baby', { method: 'POST', body: JSON.stringify(baby) }),

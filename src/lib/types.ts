@@ -33,7 +33,15 @@ export interface ExcreteLog {
   notes: string
 }
 
-export type LogEntry = FeedLog | ExcreteLog
+export interface WeightLog {
+  id: string
+  kind: 'weight'
+  timestamp: string
+  weight: number
+  notes: string
+}
+
+export type LogEntry = FeedLog | ExcreteLog | WeightLog
 
 export const DEFAULT_BABY: BabyProfile = {
   name: '小寶寶',

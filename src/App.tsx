@@ -1,19 +1,23 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import type { BabyProfile, ExcreteLog, FeedLog, FeedType, LogEntry, TabId, Unit } from './lib/types'
+import type { BabyProfile, ExcreteLog, FeedLog, FeedType, LogEntry, TabId, Unit, WeightLog } from './lib/types'
 import { DEFAULT_BABY, DURATION_CHIPS, POOP_COLORS, POOP_TEXTURES, VOLUME_CHIPS_ML } from './lib/types'
-import { combineLogs, loadBaby, loadExcretes, loadFeeds, makeId, saveAll } from './lib/storage'
+import { combineLogs, loadBaby, loadExcretes, loadFeeds, loadWeights, makeId, saveAll } from './lib/storage'
 import {
   ageLabel,
   buildDoctorText,
+  dayKey,
   excreteLabel,
   feedTypeLabel,
   fmtAgo,
   fmtDateTime,
   lastNDaysKeys,
+  nowLocalTime,
   sideLabel,
   todayExcretes,
   todayFeeds,
+  todayLocal,
   toDisplayVolume,
+  toIsoFromLocal,
   unitLabel,
 } from './lib/utils'
 import { api, setToken, clearToken, getToken } from './lib/api'
@@ -31,6 +35,7 @@ import {
   Stethoscope,
   Sun,
   UserPlus,
+  Weight,
   X,
 } from 'lucide-react'
 
@@ -51,14 +56,17 @@ function useTheme() {
 
 function useAuth() {
   const [token, setTokenState] = useState<string | null>(getToken())
+  const [username, setUsername] = useState<string | null>(() => localStorage.getItem('babylog_username'))
   const login = async (username: string, password: string) => {
     const res = await api.login(username, password)
     setToken(res.token)
     setTokenState(res.token)
+    localStorage.setItem('babylog_username', res.username)
+    setUsername(res.username)
     return res
   }
-  const logout = () => { clearToken(); setTokenState(null) }
-  return { token, login, logout }
+  const logout = () => { clearToken(); setTokenState(null); localStorage.removeItem('babylog_username'); setUsername(null) }
+  return { token, username, login, logout }
 }
 
 // MAIN APP
@@ -67,17 +75,19 @@ export default function App() {
   const [baby, setBaby] = useState<BabyProfile>(DEFAULT_BABY)
   const [feeds, setFeeds] = useState<FeedLog[]>([])
   const [excretes, setExcretes] = useState<ExcreteLog[]>([])
+  const [weights, setWeights] = useState<WeightLog[]>([])
   const [tab, setTab] = useState<TabId>('home')
   const [loaded, setLoaded] = useState(false)
   const [showAdmin, setShowAdmin] = useState(false)
   const [syncError, setSyncError] = useState<string | null>(null)
   const { theme, toggleTheme } = useTheme()
-  const { token, login, logout } = useAuth()
+  const { token, username, login, logout } = useAuth()
 
   useEffect(() => {
     setBaby(loadBaby())
     setFeeds(loadFeeds())
     setExcretes(loadExcretes())
+    setWeights(loadWeights())
     setLoaded(true)
   }, [])
 
@@ -99,6 +109,13 @@ export default function App() {
     type: r.type === 'poop' || r.type === 'both' ? (r.type as ExcreteLog['type']) : 'wet',
     color: String(r.color ?? ''),
     consistency: String(r.consistency ?? ''),
+    notes: String(r.notes ?? ''),
+  })
+  const toWeight = (r: Record<string, unknown>): WeightLog => ({
+    id: String(r.id),
+    kind: 'weight',
+    timestamp: String(r.timestamp),
+    weight: Number(r.weight) || 0,
     notes: String(r.notes ?? ''),
   })
   const toBaby = (r: Record<string, unknown> | null): BabyProfile => ({
@@ -126,24 +143,32 @@ export default function App() {
     const baby = toBaby(data.baby)
     const localFeeds = loadFeeds()
     const localExcretes = loadExcretes()
+    const localWeights = loadWeights()
     const sf = (data.feeds ?? []).map(toFeed)
     const se = (data.excretes ?? []).map(toExcrete)
+    const sw = (data.weights ?? []).map(toWeight)
     // Backfill: push local-only rows (offline / failed push / pre-sync data) up to the server.
     // Fire-and-forget; a rejected push surfaces the banner once the promise settles.
     const serverFeedIds = new Set(sf.map((f) => f.id))
     const serverExcreteIds = new Set(se.map((e) => e.id))
+    const serverWeightIds = new Set(sw.map((w) => w.id))
     for (const f of localFeeds) {
       if (!serverFeedIds.has(f.id)) api.addFeed(f).catch(() => setSyncError('⚠️ 部分本機記錄未能上傳，將於下次同步重試'))
     }
     for (const e of localExcretes) {
       if (!serverExcreteIds.has(e.id)) api.addExcrete(e).catch(() => setSyncError('⚠️ 部分本機記錄未能上傳，將於下次同步重試'))
     }
+    for (const w of localWeights) {
+      if (!serverWeightIds.has(w.id)) api.addWeight(w).catch(() => setSyncError('⚠️ 部分本機記錄未能上傳，將於下次同步重試'))
+    }
     const mf = mergeById(localFeeds, sf)
     const me = mergeById(localExcretes, se)
+    const mw = mergeById(localWeights, sw)
     setBaby(baby)
     setFeeds(mf)
     setExcretes(me)
-    saveAll(baby, mf, me)
+    setWeights(mw)
+    saveAll(baby, mf, me, mw)
     setSyncError(null)
   }, [])
 
@@ -154,11 +179,12 @@ export default function App() {
   }, [token, refreshFromServer])
 
   const persist = useCallback(
-    (b: BabyProfile, f: FeedLog[], e: ExcreteLog[]) => {
-      saveAll(b, f, e)
+    (b: BabyProfile, f: FeedLog[], e: ExcreteLog[], w: WeightLog[]) => {
+      saveAll(b, f, e, w)
       setBaby(b)
       setFeeds(f)
       setExcretes(e)
+      setWeights(w)
     },
     [],
   )
@@ -171,47 +197,57 @@ export default function App() {
   const addFeed = useCallback(
     (log: FeedLog) => {
       const f = [log, ...feeds]
-      persist(baby, f, excretes)
+      persist(baby, f, excretes, weights)
       push(() => api.addFeed(log))
     },
-    [baby, feeds, excretes, persist, push],
+    [baby, feeds, excretes, weights, persist, push],
   )
 
   const addExcrete = useCallback(
     (log: ExcreteLog) => {
       const e = [log, ...excretes]
-      persist(baby, feeds, e)
+      persist(baby, feeds, e, weights)
       push(() => api.addExcrete(log))
     },
-    [baby, feeds, excretes, persist, push],
+    [baby, feeds, excretes, weights, persist, push],
+  )
+
+  const addWeight = useCallback(
+    (log: WeightLog) => {
+      const w = [log, ...weights]
+      persist(baby, feeds, excretes, w)
+      push(() => api.addWeight(log))
+    },
+    [baby, feeds, excretes, weights, persist, push],
   )
 
   const saveBaby = useCallback(
     (b: BabyProfile) => {
-      persist(b, feeds, excretes)
+      persist(b, feeds, excretes, weights)
       push(() => api.saveBaby(b))
     },
-    [feeds, excretes, persist, push],
+    [feeds, excretes, weights, persist, push],
   )
 
   const deleteLog = useCallback(
-    (id: string, kind: 'feed' | 'excrete') => {
+    (id: string, kind: 'feed' | 'excrete' | 'weight') => {
       const f = kind === 'feed' ? feeds.filter((x) => x.id !== id) : feeds
       const e = kind === 'excrete' ? excretes.filter((x) => x.id !== id) : excretes
-      persist(baby, f, e)
+      const w = kind === 'weight' ? weights.filter((x) => x.id !== id) : weights
+      persist(baby, f, e, w)
       push(() => api.deleteLog(id, kind))
     },
-    [baby, feeds, excretes, persist, push],
+    [baby, feeds, excretes, weights, persist, push],
   )
 
   const resetAll = useCallback(() => {
     if (!window.confirm('清除所有記錄？此操作無法復原。')) return
     const b = { ...DEFAULT_BABY, dob: baby.dob }
-    persist(b, [], [])
+    persist(b, [], [], [])
     push(() => api.deleteAll())
   }, [baby.dob, persist, push])
 
-  const allLogs = useMemo(() => combineLogs(feeds, excretes), [feeds, excretes])
+  const allLogs = useMemo(() => combineLogs(feeds, excretes, weights), [feeds, excretes, weights])
 
   if (!loaded && token) return <Splash />
 
@@ -221,16 +257,16 @@ export default function App() {
         <LoginScreen onLogin={login} onOpenAdmin={() => setShowAdmin(true)} />
       ) : (
         <div className="mx-auto flex min-h-dvh max-w-[480px] flex-col bg-[var(--bg)]">
-          <Header baby={baby} tab={tab} feeds={feeds} excretes={excretes} saveBaby={saveBaby} resetAll={resetAll} theme={theme} toggleTheme={toggleTheme} onLogout={logout} onOpenAdmin={() => setShowAdmin(true)} />
+          <Header baby={baby} tab={tab} feeds={feeds} excretes={excretes} username={username} saveBaby={saveBaby} resetAll={resetAll} theme={theme} toggleTheme={toggleTheme} onLogout={logout} onOpenAdmin={() => setShowAdmin(true)} />
           {syncError && (
             <div className="mx-4 mt-2 rounded-xl bg-[var(--red)]/10 px-3 py-2 text-xs font-medium text-[var(--red)]">{syncError}</div>
           )}
           <main className="safe-pb flex-1 px-4 pt-3">
-            {tab === 'home' && <Home baby={baby} feeds={feeds} excretes={excretes} allLogs={allLogs} deleteLog={deleteLog} setTab={setTab} />}
+            {tab === 'home' && <Home baby={baby} feeds={feeds} excretes={excretes} weights={weights} allLogs={allLogs} deleteLog={deleteLog} setTab={setTab} addWeight={addWeight} />}
             {tab === 'feed' && <FeedForm baby={baby} addFeed={addFeed} setTab={setTab} />}
             {tab === 'excrete' && <ExcreteForm addExcrete={addExcrete} setTab={setTab} />}
             {tab === 'history' && <History allLogs={allLogs} deleteLog={deleteLog} unit={baby.unit} />}
-            {tab === 'charts' && <Charts feeds={feeds} excretes={excretes} unit={baby.unit} />}
+            {tab === 'charts' && <Charts feeds={feeds} excretes={excretes} weights={weights} unit={baby.unit} />}
           </main>
           <BottomNav tab={tab} setTab={setTab} />
         </div>
@@ -264,6 +300,7 @@ function Header({
   tab,
   feeds,
   excretes,
+  username,
   saveBaby,
   resetAll,
   theme,
@@ -275,6 +312,7 @@ function Header({
   tab: TabId
   feeds: FeedLog[]
   excretes: ExcreteLog[]
+  username: string | null
   saveBaby: (b: BabyProfile) => void
   resetAll: () => void
   theme: 'light' | 'dark'
@@ -291,6 +329,12 @@ function Header({
     history: '歷史',
     charts: '圖表',
   }
+  const tf = todayFeeds(feeds)
+  const te = todayExcretes(excretes)
+  const feedVol = tf.reduce((s, f) => s + (f.volume || 0), 0)
+  const hour = new Date().getHours()
+  const greet = hour < 6 ? '夜深了' : hour < 12 ? '早晨' : hour < 18 ? '午安' : '晚安'
+  const greetIcon = hour < 6 || hour >= 18 ? '🌙' : '☀️'
 
   return (
     <>
@@ -335,7 +379,14 @@ function Header({
             </button>
           </div>
         </div>
-        <div className="mt-1 text-xl font-bold tracking-tight text-[var(--text)]">{titles[tab]}</div>
+        {tab === 'home' ? (
+          <div className="mt-1">
+            <div className="text-xl font-bold tracking-tight text-[var(--text)]">{greet}，{username || baby.name} {greetIcon}</div>
+            <div className="mt-0.5 text-sm font-medium text-[var(--muted)]">今日 餵奶 {tf.length} 次 · {toDisplayVolume(feedVol, baby.unit)}{unitLabel(baby.unit)} ｜ 排泄 {te.length} 次</div>
+          </div>
+        ) : (
+          <div className="mt-1 text-xl font-bold tracking-tight text-[var(--text)]">{titles[tab]}</div>
+        )}
       </header>
 
       {showSettings && <SettingsModal baby={baby} saveBaby={saveBaby} resetAll={resetAll} onClose={() => setShowSettings(false)} />}
@@ -385,17 +436,22 @@ function Home({
   baby,
   feeds,
   excretes,
+  weights,
   allLogs,
   deleteLog,
   setTab,
+  addWeight,
 }: {
   baby: BabyProfile
   feeds: FeedLog[]
   excretes: ExcreteLog[]
+  weights: WeightLog[]
   allLogs: LogEntry[]
-  deleteLog: (id: string, kind: 'feed' | 'excrete') => void
+  deleteLog: (id: string, kind: 'feed' | 'excrete' | 'weight') => void
   setTab: (t: TabId) => void
+  addWeight: (log: WeightLog) => void
 }) {
+  const [showWeight, setShowWeight] = useState(false)
   const tf = todayFeeds(feeds)
   const te = todayExcretes(excretes)
   const vol = tf.reduce((s, f) => s + (f.volume || 0), 0)
@@ -404,6 +460,9 @@ function Home({
 
   const lastF = feeds.slice().sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp))[0]
   const lastE = excretes.slice().sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp))[0]
+  const sortedW = weights.slice().sort((a, b) => +new Date(b.timestamp) - +new Date(a.timestamp))
+  const latestW = sortedW[0]
+  const deltaW = latestW && sortedW[1] ? latestW.weight - sortedW[1].weight : null
 
   return (
     <div className="space-y-4 rise">
@@ -456,6 +515,37 @@ function Home({
         </div>
       </div>
 
+      {/* Weight */}
+      <div className="card rounded-2xl p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <div className="mb-1 text-xs text-[var(--muted)]">最新體重</div>
+            <div className="flex items-baseline gap-1">
+              {latestW ? (
+                <>
+                  <span className="num text-3xl font-bold text-[var(--blue)]">{latestW.weight}</span>
+                  <span className="text-sm text-[var(--muted)]">g</span>
+                  {deltaW !== null && deltaW !== 0 && (
+                    <span className={`ml-1 text-xs font-semibold ${deltaW > 0 ? 'text-[var(--teal)]' : 'text-[var(--red)]'}`}>
+                      {deltaW > 0 ? '+' : ''}{deltaW}g
+                    </span>
+                  )}
+                </>
+              ) : (
+                <span className="text-sm text-[var(--muted)]">尚未記錄體重</span>
+              )}
+            </div>
+            {latestW && <div className="mt-0.5 text-xs text-[var(--muted)]">{fmtAgo(latestW.timestamp)} · 共 {weights.length} 次</div>}
+          </div>
+          <button
+            onClick={() => setShowWeight(true)}
+            className="flex items-center gap-1.5 rounded-xl bg-[var(--blue-dim)] px-3 py-2 text-xs font-semibold text-[var(--blue)] active:opacity-80"
+          >
+            <Weight size={14} /> 記錄
+          </button>
+        </div>
+      </div>
+
       {/* Recent */}
       <div>
         <div className="mb-2 flex items-center justify-between px-1">
@@ -473,6 +563,12 @@ function Home({
           ))}
         </div>
       </div>
+      {showWeight && (
+        <WeightModal
+          onSave={(log) => { addWeight(log); setShowWeight(false) }}
+          onClose={() => setShowWeight(false)}
+        />
+      )}
     </div>
   )
 }
@@ -499,6 +595,42 @@ function LogCard({ log, unit, bare = false, onDelete }: { log: LogEntry; unit: U
                 {log.duration > 0 && ` · ${log.duration}min`}
                 {log.side && ` · ${sideLabel(log.side)}`}
               </div>
+              {log.notes && <div className="mt-1 text-xs italic text-[var(--muted)]">{log.notes}</div>}
+            </div>
+          </div>
+          {confirm ? (
+            <button
+              onClick={(e) => { e.stopPropagation(); onDelete() }}
+              className="flex-shrink-0 rounded-lg bg-[var(--red)]/10 px-2 py-1 text-xs font-semibold text-[var(--red)] active:bg-[var(--red)]/20"
+            >
+              確認?
+            </button>
+          ) : (
+            <button
+              onClick={(e) => { e.stopPropagation(); setConfirm(true); setTimeout(() => setConfirm(false), 3000) }}
+              className="flex-shrink-0 text-[var(--muted)] active:text-[var(--red)]"
+              aria-label="刪除"
+            >
+              <X size={16} />
+            </button>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  if (log.kind === 'weight') {
+    return (
+      <div className={`${bare ? '' : 'card rounded-2xl'} p-3.5 rise`}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-2.5 min-w-0 flex-1">
+            <span className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-[var(--blue-dim)] text-[var(--blue)]"><Weight size={14} /></span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 text-sm">
+                <span className="font-semibold">體重</span>
+                <Badge color="var(--blue)" label={`${log.weight} g`} />
+              </div>
+              <div className="text-xs text-[var(--muted)]">{fmtDateTime(log.timestamp)}</div>
               {log.notes && <div className="mt-1 text-xs italic text-[var(--muted)]">{log.notes}</div>}
             </div>
           </div>
@@ -578,12 +710,14 @@ function FeedForm({ baby, addFeed, setTab }: { baby: BabyProfile; addFeed: (f: F
   const [duration, setDuration] = useState('')
   const [side, setSide] = useState<FeedLog['side']>('both')
   const [notes, setNotes] = useState('')
+  const [date, setDate] = useState(todayLocal())
+  const [time, setTime] = useState(nowLocalTime())
 
   const save = () => {
     addFeed({
       id: makeId(),
       kind: 'feed',
-      timestamp: new Date().toISOString(),
+      timestamp: toIsoFromLocal(date, time),
       type,
       volume: Number(volume) || 0,
       duration: Number(duration) || 0,
@@ -591,6 +725,7 @@ function FeedForm({ baby, addFeed, setTab }: { baby: BabyProfile; addFeed: (f: F
       notes: notes.trim(),
     })
     setVolume(''); setDuration(''); setNotes('')
+    setDate(todayLocal()); setTime(nowLocalTime())
     setTab('home')
   }
 
@@ -679,6 +814,20 @@ function FeedForm({ baby, addFeed, setTab }: { baby: BabyProfile; addFeed: (f: F
           </div>
         )}
 
+        {/* Time */}
+        <div className="mb-4">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">時間</span>
+            <button onClick={() => { setDate(todayLocal()); setTime(nowLocalTime()) }} className="text-xs font-semibold text-[var(--teal)] active:text-[var(--teal-dim)]">
+              現在
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <input type="date" value={date} max={todayLocal()} onChange={(e) => setDate(e.target.value)} className="field" />
+            <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="field" />
+          </div>
+        </div>
+
         {/* Notes */}
         <div className="mb-5">
           <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">備註</div>
@@ -706,18 +855,21 @@ function ExcreteForm({ addExcrete, setTab }: { addExcrete: (e: ExcreteLog) => vo
   const [color, setColor] = useState('')
   const [texture, setTexture] = useState('')
   const [notes, setNotes] = useState('')
+  const [date, setDate] = useState(todayLocal())
+  const [time, setTime] = useState(nowLocalTime())
 
   const save = () => {
     addExcrete({
       id: makeId(),
       kind: 'excrete',
-      timestamp: new Date().toISOString(),
+      timestamp: toIsoFromLocal(date, time),
       type,
       color: type !== 'wet' ? color : '',
       consistency: type !== 'wet' ? texture : '',
       notes: notes.trim(),
     })
     setColor(''); setTexture(''); setNotes('')
+    setDate(todayLocal()); setTime(nowLocalTime())
     setTab('home')
   }
 
@@ -774,6 +926,20 @@ function ExcreteForm({ addExcrete, setTab }: { addExcrete: (e: ExcreteLog) => vo
           </div>
         )}
 
+        {/* Time */}
+        <div className="mb-4">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">時間</span>
+            <button onClick={() => { setDate(todayLocal()); setTime(nowLocalTime()) }} className="text-xs font-semibold text-[var(--pink)] active:opacity-70">
+              現在
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <input type="date" value={date} max={todayLocal()} onChange={(e) => setDate(e.target.value)} className="field" />
+            <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="field" />
+          </div>
+        </div>
+
         <div className="mb-5">
           <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">備註</div>
           <input
@@ -795,13 +961,14 @@ function ExcreteForm({ addExcrete, setTab }: { addExcrete: (e: ExcreteLog) => vo
 // ──────────────────────────────────────────────
 // HISTORY
 // ──────────────────────────────────────────────
-function History({ allLogs, deleteLog, unit }: { allLogs: LogEntry[]; deleteLog: (id: string, kind: 'feed' | 'excrete') => void; unit: Unit }) {
-  const [filter, setFilter] = useState<'all' | 'feed' | 'excrete'>('all')
+function History({ allLogs, deleteLog, unit }: { allLogs: LogEntry[]; deleteLog: (id: string, kind: 'feed' | 'excrete' | 'weight') => void; unit: Unit }) {
+  const [filter, setFilter] = useState<'all' | 'feed' | 'excrete' | 'weight'>('all')
   const [search, setSearch] = useState('')
 
   const filtered = allLogs.filter((log) => {
     if (filter === 'feed' && log.kind !== 'feed') return false
     if (filter === 'excrete' && log.kind !== 'excrete') return false
+    if (filter === 'weight' && log.kind !== 'weight') return false
     if (search) {
       const notes = log.kind === 'feed' ? log.notes || '' : log.notes || ''
       if (!notes.toLowerCase().includes(search.toLowerCase())) return false
@@ -812,13 +979,13 @@ function History({ allLogs, deleteLog, unit }: { allLogs: LogEntry[]; deleteLog:
   return (
     <div className="space-y-3 rise">
       <div className="flex gap-2">
-        {(['all', 'feed', 'excrete'] as const).map((f) => (
+        {(['all', 'feed', 'excrete', 'weight'] as const).map((f) => (
           <button
             key={f}
             onClick={() => setFilter(f)}
             className={`chip text-xs ${filter === f ? 'active' : ''}`}
           >
-            {f === 'all' ? '全部' : f === 'feed' ? '餵奶' : '排泄'}
+            {f === 'all' ? '全部' : f === 'feed' ? '餵奶' : f === 'excrete' ? '排泄' : '重量'}
           </button>
         ))}
       </div>
@@ -850,17 +1017,17 @@ const PERIODS = [
 ] as const
 type PeriodId = (typeof PERIODS)[number]['id']
 
-function Charts({ feeds, excretes, unit }: { feeds: FeedLog[]; excretes: ExcreteLog[]; unit: Unit }) {
+function Charts({ feeds, excretes, weights, unit }: { feeds: FeedLog[]; excretes: ExcreteLog[]; weights: WeightLog[]; unit: Unit }) {
   const [period, setPeriod] = useState<PeriodId>('7d')
   const cfg = PERIODS.find((p) => p.id === period)!
   const days = lastNDaysKeys(cfg.days)
   const label = days.map((d) => d.slice(5))
 
   const feedVol = days.map((d) =>
-    toDisplayVolume(feeds.filter((f) => f.timestamp.startsWith(d)).reduce((s, f) => s + (f.volume || 0), 0), unit),
+    toDisplayVolume(feeds.filter((f) => dayKey(f.timestamp) === d).reduce((s, f) => s + (f.volume || 0), 0), unit),
   )
   const excByDay = days.map((d) => {
-    const ex = excretes.filter((e) => e.timestamp.startsWith(d))
+    const ex = excretes.filter((e) => dayKey(e.timestamp) === d)
     return {
       wet: ex.filter((e) => e.type === 'wet' || e.type === 'both').length,
       poop: ex.filter((e) => e.type === 'poop' || e.type === 'both').length,
@@ -868,8 +1035,19 @@ function Charts({ feeds, excretes, unit }: { feeds: FeedLog[]; excretes: Excrete
     }
   })
 
+  // Sparse weight entries → last weight of each day, forward-filled for a step trend.
+  let lastW = 0
+  const weightSeries = days.map((d) => {
+    const dayW = weights
+      .filter((w) => dayKey(w.timestamp) === d)
+      .sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+    if (dayW.length) lastW = dayW[dayW.length - 1].weight
+    return lastW
+  })
+
   const maxVol = Math.max(...feedVol, 1)
   const maxEx = Math.max(...excByDay.map((d) => d.total), 1)
+  const maxW = Math.max(...weightSeries, 1)
   const CHART_H = 160
 
   return (
@@ -898,6 +1076,15 @@ function Charts({ feeds, excretes, unit }: { feeds: FeedLog[]; excretes: Excrete
           <span className="text-xs text-[var(--muted)]">近{cfg.days}天 · 次/日</span>
         </div>
         <BarChart labels={label} data={excByDay.map((d) => d.total)} max={maxEx} color="var(--pink)" h={CHART_H} barW={cfg.barW} spacing={cfg.spacing} labelEvery={cfg.labelEvery} />
+      </div>
+
+      {/* Weight chart */}
+      <div className="card rounded-2xl p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <span className="text-sm font-semibold">體重趨勢</span>
+          <span className="text-xs text-[var(--muted)]">近{cfg.days}天 · g</span>
+        </div>
+        <BarChart labels={label} data={weightSeries} max={maxW} color="var(--blue)" h={CHART_H} barW={cfg.barW} spacing={cfg.spacing} labelEvery={cfg.labelEvery} />
       </div>
 
       <div className="text-center text-xs text-[var(--muted)]">數據僅供參考 · 如有異常請即時聯絡醫生</div>
@@ -1125,6 +1312,82 @@ function ReportModal({
         <div className="border-t border-[var(--border)] px-4 py-3 text-center text-xs text-[var(--muted)]">
           此報告僅供參考 · 請帶同完整記錄給醫生參閱
         </div>
+      </div>
+    </div>
+  )
+}
+
+function WeightModal({ onSave, onClose }: { onSave: (log: WeightLog) => void; onClose: () => void }) {
+  const [weight, setWeight] = useState('')
+  const [notes, setNotes] = useState('')
+  const [date, setDate] = useState(todayLocal())
+  const [time, setTime] = useState(nowLocalTime())
+  const [closing, setClosing] = useState(false)
+  const invalid = !Number(weight) || Number(weight) <= 0
+
+  const close = () => {
+    setClosing(true)
+    setTimeout(onClose, 180)
+  }
+
+  const save = () => {
+    if (invalid) return
+    onSave({
+      id: makeId(),
+      kind: 'weight',
+      timestamp: toIsoFromLocal(date, time),
+      weight: Math.round(Number(weight)),
+      notes: notes.trim(),
+    })
+  }
+
+  return (
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget) close() }}
+      className={`fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center ${closing ? 'modal-scrim-exit' : 'modal-scrim'}`}
+    >
+      <div className={`w-full max-w-[420px] rounded-t-2xl bg-[var(--surface)] p-5 sm:rounded-2xl sm:m-4 ${closing ? 'modal-sheet exit' : 'modal-sheet'}`}>
+        <div className="mb-4 flex items-center justify-between">
+          <span className="text-lg font-semibold">記錄體重</span>
+          <button onClick={close} aria-label="關閉" className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--muted)] active:bg-[var(--surface2)]"><X size={18} /></button>
+        </div>
+        <div className="space-y-3">
+          <div>
+            <div className="mb-1 text-xs text-[var(--muted)]">體重 (g)</div>
+            <input
+              value={weight}
+              onChange={(e) => setWeight(e.target.value)}
+              placeholder="如：3000"
+              inputMode="numeric"
+              autoFocus
+              className="field"
+            />
+          </div>
+          <div>
+            <div className="mb-1 flex items-center justify-between">
+              <span className="text-xs text-[var(--muted)]">時間</span>
+              <button onClick={() => { setDate(todayLocal()); setTime(nowLocalTime()) }} className="text-xs font-semibold text-[var(--blue)] active:opacity-70">
+                現在
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <input type="date" value={date} max={todayLocal()} onChange={(e) => setDate(e.target.value)} className="field" />
+              <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="field" />
+            </div>
+          </div>
+          <div>
+            <div className="mb-1 text-xs text-[var(--muted)]">備註</div>
+            <input
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="選填 · 如：健康院量度"
+              className="field"
+            />
+          </div>
+        </div>
+        <button onClick={save} disabled={invalid} className="btn-primary mt-5">
+          ✓ 儲存體重
+        </button>
       </div>
     </div>
   )

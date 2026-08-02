@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS feeds (
   duration INTEGER DEFAULT 0,
   side TEXT,
   notes TEXT DEFAULT '',
-  created_by TEXT
+  user_id INTEGER REFERENCES users(id)
 );
 
 CREATE TABLE IF NOT EXISTS excretes (
@@ -37,8 +37,21 @@ CREATE TABLE IF NOT EXISTS excretes (
   color TEXT DEFAULT '',
   consistency TEXT DEFAULT '',
   notes TEXT DEFAULT '',
-  created_by TEXT
+  user_id INTEGER REFERENCES users(id)
 );
+
+CREATE TABLE IF NOT EXISTS weights (
+  id TEXT PRIMARY KEY,
+  timestamp TEXT NOT NULL,
+  weight INTEGER NOT NULL,
+  notes TEXT DEFAULT '',
+  user_id INTEGER REFERENCES users(id)
+);
+
+-- Hot paths: time-sorted listing + per-day bucketing
+CREATE INDEX IF NOT EXISTS idx_feeds_timestamp ON feeds(timestamp);
+CREATE INDEX IF NOT EXISTS idx_excretes_timestamp ON excretes(timestamp);
+CREATE INDEX IF NOT EXISTS idx_weights_timestamp ON weights(timestamp);
 
 -- Seed one baby record
 INSERT OR IGNORE INTO baby (id, name, dob) VALUES (1, '寶寶', '2026-01-01');

@@ -32,9 +32,9 @@ async function verifyPassword(pw: string, hash: string) {
   return bcrypt.compare(pw, hash)
 }
 
-async function createToken(username: string, secret: string) {
+async function createToken(username: string, uid: number, secret: string) {
   const key = new TextEncoder().encode(secret)
-  return await new SignJWT({ sub: username })
+  return await new SignJWT({ sub: username, uid })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setExpirationTime('7d')
@@ -45,7 +45,7 @@ async function verifyToken(token: string, secret: string) {
   try {
     const key = new TextEncoder().encode(secret)
     const { payload } = await jwtVerify(token, key)
-    return payload.sub as string
+    return { username: payload.sub as string, uid: (payload.uid as number) ?? null }
   } catch {
     return null
   }
@@ -58,8 +58,14 @@ async function requireAuth(req: Request, env: Env) {
   return verifyToken(token, env.JWT_SECRET)
 }
 
-// Self-healing schema: add baby profile columns if the table predates them.
-// ponytail: runs a PRAGMA per request — negligible, removes any manual migration step.
+// Tokens issued before the uid claim existed fall back to a username lookup.
+async function resolveUserId(env: Env, username: string, uid: number | null) {
+  if (uid != null) return uid
+  const row = await env.DB.prepare('SELECT id FROM users WHERE username = ?').bind(username).first<{ id: number }>()
+  return row?.id ?? null
+}
+
+// Self-healing schema: baby profile columns for tables that predate them.
 async function ensureBabySchema(env: Env) {
   const cols = await env.DB.prepare('PRAGMA table_info(baby)').all()
   const names = new Set(cols.results.map((c: any) => c.name))
@@ -73,6 +79,85 @@ async function ensureBabySchema(env: Env) {
       await env.DB.prepare(`ALTER TABLE baby ADD COLUMN ${name} ${def}`).run()
     }
   }
+}
+
+// Self-healing schema for log tables:
+//  1. create weights if missing (new installs)
+//  2. rebuild any log table still using `created_by` (username) → `user_id` (FK)
+//  3. ensure timestamp indexes (hot path: sort + day bucketing)
+async function ensureLogsSchema(env: Env) {
+  await env.DB.prepare(`CREATE TABLE IF NOT EXISTS weights (
+    id TEXT PRIMARY KEY,
+    timestamp TEXT NOT NULL,
+    weight INTEGER NOT NULL,
+    notes TEXT DEFAULT '',
+    user_id INTEGER REFERENCES users(id)
+  )`).run()
+
+  const hasUserId = async (t: string) => {
+    const cols = await env.DB.prepare(`PRAGMA table_info(${t})`).all()
+    return cols.results.some((c: any) => c.name === 'user_id')
+  }
+
+  if (!(await hasUserId('feeds'))) {
+    await env.DB.prepare('ALTER TABLE feeds RENAME TO feeds_old').run()
+    await env.DB.prepare(`CREATE TABLE feeds (
+      id TEXT PRIMARY KEY,
+      timestamp TEXT NOT NULL,
+      type TEXT NOT NULL,
+      volume INTEGER DEFAULT 0,
+      duration INTEGER DEFAULT 0,
+      side TEXT,
+      notes TEXT DEFAULT '',
+      user_id INTEGER REFERENCES users(id)
+    )`).run()
+    await env.DB.prepare(`
+      INSERT INTO feeds (id, timestamp, type, volume, duration, side, notes, user_id)
+      SELECT x.id, x.timestamp, x.type, x.volume, x.duration, x.side, x.notes, COALESCE(u.id, (SELECT MIN(id) FROM users))
+      FROM feeds_old x LEFT JOIN users u ON u.username = x.created_by
+    `).run()
+    await env.DB.prepare('DROP TABLE feeds_old').run()
+  }
+
+  if (!(await hasUserId('excretes'))) {
+    await env.DB.prepare('ALTER TABLE excretes RENAME TO excretes_old').run()
+    await env.DB.prepare(`CREATE TABLE excretes (
+      id TEXT PRIMARY KEY,
+      timestamp TEXT NOT NULL,
+      type TEXT NOT NULL,
+      color TEXT DEFAULT '',
+      consistency TEXT DEFAULT '',
+      notes TEXT DEFAULT '',
+      user_id INTEGER REFERENCES users(id)
+    )`).run()
+    await env.DB.prepare(`
+      INSERT INTO excretes (id, timestamp, type, color, consistency, notes, user_id)
+      SELECT x.id, x.timestamp, x.type, x.color, x.consistency, x.notes, COALESCE(u.id, (SELECT MIN(id) FROM users))
+      FROM excretes_old x LEFT JOIN users u ON u.username = x.created_by
+    `).run()
+    await env.DB.prepare('DROP TABLE excretes_old').run()
+  }
+
+  if (!(await hasUserId('weights'))) {
+    await env.DB.prepare('ALTER TABLE weights RENAME TO weights_old').run()
+    await env.DB.prepare(`CREATE TABLE weights (
+      id TEXT PRIMARY KEY,
+      timestamp TEXT NOT NULL,
+      weight INTEGER NOT NULL,
+      notes TEXT DEFAULT '',
+      user_id INTEGER REFERENCES users(id)
+    )`).run()
+    await env.DB.prepare(`
+      INSERT INTO weights (id, timestamp, weight, notes, user_id)
+      SELECT x.id, x.timestamp, x.weight, x.notes, COALESCE(u.id, (SELECT MIN(id) FROM users))
+      FROM weights_old x LEFT JOIN users u ON u.username = x.created_by
+    `).run()
+    await env.DB.prepare('DROP TABLE weights_old').run()
+  }
+
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_feeds_timestamp ON feeds(timestamp)').run()
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_excretes_timestamp ON excretes(timestamp)').run()
+  await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_weights_timestamp ON weights(timestamp)').run()
 }
 
 export default {
@@ -96,7 +181,7 @@ export default {
         return error('Invalid credentials', 401)
       }
 
-      const token = await createToken(username, env.JWT_SECRET)
+      const token = await createToken(username, user.id, env.JWT_SECRET)
       return json({ token, username })
     }
 
@@ -117,27 +202,31 @@ export default {
     }
 
     // All other routes require auth
-    const username = await requireAuth(req, env)
-    if (!username) return error('Unauthorized', 401)
+    const auth = await requireAuth(req, env)
+    if (!auth) return error('Unauthorized', 401)
+    const { username, uid } = auth
 
     await ensureBabySchema(env)
+    await ensureLogsSchema(env)
 
     // GET all data (shared)
     if (path === '/api/data' && req.method === 'GET') {
       const baby = await env.DB.prepare('SELECT * FROM baby WHERE id = 1').first()
       const feeds = await env.DB.prepare('SELECT * FROM feeds ORDER BY timestamp DESC').all()
       const excretes = await env.DB.prepare('SELECT * FROM excretes ORDER BY timestamp DESC').all()
-      return json({ baby, feeds: feeds.results, excretes: excretes.results })
+      const weights = await env.DB.prepare('SELECT * FROM weights ORDER BY timestamp DESC').all()
+      return json({ baby, feeds: feeds.results, excretes: excretes.results, weights: weights.results })
     }
 
     // Add feed
     if (path === '/api/feeds' && req.method === 'POST') {
       const log = await req.json()
       const id = log.id || crypto.randomUUID()
+      const userId = await resolveUserId(env, username, uid)
       await env.DB.prepare(`
-        INSERT INTO feeds (id, timestamp, type, volume, duration, side, notes, created_by)
+        INSERT INTO feeds (id, timestamp, type, volume, duration, side, notes, user_id)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).bind(id, log.timestamp, log.type, log.volume || 0, log.duration || 0, log.side || null, log.notes || '', username).run()
+      `).bind(id, log.timestamp, log.type, log.volume || 0, log.duration || 0, log.side || null, log.notes || '', userId).run()
       return json({ success: true, id })
     }
 
@@ -145,18 +234,31 @@ export default {
     if (path === '/api/excretes' && req.method === 'POST') {
       const log = await req.json()
       const id = log.id || crypto.randomUUID()
+      const userId = await resolveUserId(env, username, uid)
       await env.DB.prepare(`
-        INSERT INTO excretes (id, timestamp, type, color, consistency, notes, created_by)
+        INSERT INTO excretes (id, timestamp, type, color, consistency, notes, user_id)
         VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).bind(id, log.timestamp, log.type, log.color || '', log.consistency || '', log.notes || '', username).run()
+      `).bind(id, log.timestamp, log.type, log.color || '', log.consistency || '', log.notes || '', userId).run()
       return json({ success: true, id })
     }
 
-    // Delete log (feed or excrete)
+    // Add weight
+    if (path === '/api/weights' && req.method === 'POST') {
+      const log = await req.json()
+      const id = log.id || crypto.randomUUID()
+      const userId = await resolveUserId(env, username, uid)
+      await env.DB.prepare('INSERT INTO weights (id, timestamp, weight, notes, user_id) VALUES (?, ?, ?, ?, ?)')
+        .bind(id, log.timestamp, log.weight || 0, log.notes || '', userId).run()
+      return json({ success: true, id })
+    }
+
+    // Delete log (feed, excrete or weight)
     if (path === '/api/logs' && req.method === 'DELETE') {
       const { id, kind } = await req.json()
       if (kind === 'feed') {
         await env.DB.prepare('DELETE FROM feeds WHERE id = ?').bind(id).run()
+      } else if (kind === 'weight') {
+        await env.DB.prepare('DELETE FROM weights WHERE id = ?').bind(id).run()
       } else {
         await env.DB.prepare('DELETE FROM excretes WHERE id = ?').bind(id).run()
       }
@@ -167,6 +269,7 @@ export default {
     if (path === '/api/logs/all' && req.method === 'DELETE') {
       await env.DB.prepare('DELETE FROM feeds').run()
       await env.DB.prepare('DELETE FROM excretes').run()
+      await env.DB.prepare('DELETE FROM weights').run()
       return json({ success: true })
     }
 
