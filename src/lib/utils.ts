@@ -98,7 +98,7 @@ export function buildDoctorText(baby: BabyProfile, feeds: FeedLog[], excretes: E
   const wet = te.filter((e) => e.type === 'wet' || e.type === 'both').length
   const poop = te.filter((e) => e.type === 'poop' || e.type === 'both').length
   const lines = [
-    `BabyLog 醫生報告 — ${baby.name}`,
+    `BabyTracker 醫生報告 — ${baby.name}`,
     `性別：${baby.gender}｜出生日：${baby.dob || '—'}｜出生體重：${baby.birthWeight || '—'}g`,
     `年齡：${ageLabel(baby.dob)}`,
     '',

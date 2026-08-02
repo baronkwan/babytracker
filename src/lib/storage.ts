@@ -2,15 +2,32 @@ import type { BabyProfile, ExcreteLog, FeedLog, LogEntry, WeightLog } from './ty
 import { DEFAULT_BABY } from './types'
 
 const KEYS = {
-  baby: 'babylog_v2_profile',
-  feeds: 'babylog_v2_feeds',
-  excretes: 'babylog_v2_excretes',
-  weights: 'babylog_v2_weights',
-  // migrate from old single-file app keys if present
+  baby: 'babytracker_v2_profile',
+  feeds: 'babytracker_v2_feeds',
+  excretes: 'babytracker_v2_excretes',
+  weights: 'babytracker_v2_weights',
+  // legacy keys from the old single-file app
   oldBaby: 'baby_profile',
   oldFeeds: 'baby_feeds',
   oldExcretes: 'baby_excretes',
 } as const
+
+// One-time migration from the old 'babylog_*' keys so local data survives the rename.
+const OLD_KEYS: Record<'baby' | 'feeds' | 'excretes' | 'weights', string> = {
+  baby: 'babylog_v2_profile',
+  feeds: 'babylog_v2_feeds',
+  excretes: 'babylog_v2_excretes',
+  weights: 'babylog_v2_weights',
+}
+for (const k of ['baby', 'feeds', 'excretes', 'weights'] as const) {
+  if (!localStorage.getItem(KEYS[k])) {
+    const v = localStorage.getItem(OLD_KEYS[k])
+    if (v !== null) {
+      localStorage.setItem(KEYS[k], v)
+      localStorage.removeItem(OLD_KEYS[k])
+    }
+  }
+}
 
 function safeParse<T>(raw: string | null, fallback: T): T {
   if (!raw) return fallback

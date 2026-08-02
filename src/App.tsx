@@ -56,16 +56,27 @@ function useTheme() {
 
 function useAuth() {
   const [token, setTokenState] = useState<string | null>(getToken())
-  const [username, setUsername] = useState<string | null>(() => localStorage.getItem('babylog_username'))
+  const [username, setUsername] = useState<string | null>(() => {
+    const u = localStorage.getItem('babytracker_username')
+    if (u !== null) return u
+    // one-time migration from the old key
+    const old = localStorage.getItem('babylog_username')
+    if (old !== null) {
+      localStorage.setItem('babytracker_username', old)
+      localStorage.removeItem('babylog_username')
+      return old
+    }
+    return null
+  })
   const login = async (username: string, password: string) => {
     const res = await api.login(username, password)
     setToken(res.token)
     setTokenState(res.token)
-    localStorage.setItem('babylog_username', res.username)
+    localStorage.setItem('babytracker_username', res.username)
     setUsername(res.username)
     return res
   }
-  const logout = () => { clearToken(); setTokenState(null); localStorage.removeItem('babylog_username'); setUsername(null) }
+  const logout = () => { clearToken(); setTokenState(null); localStorage.removeItem('babytracker_username'); localStorage.removeItem('babylog_username'); setUsername(null) }
   return { token, username, login, logout }
 }
 
@@ -281,7 +292,7 @@ function Splash() {
         <div className="rounded-2xl bg-gradient-to-br from-[var(--teal)] to-[var(--pink)] p-4 shadow-lg">
           <span className="text-4xl">👶</span>
         </div>
-        <span className="text-lg font-semibold tracking-tight">BabyLog</span>
+        <span className="text-lg font-semibold tracking-tight">BabyTracker</span>
       </div>
     </div>
   )
@@ -1331,7 +1342,7 @@ function LoginScreen({ onLogin, onOpenAdmin }: { onLogin: (u: string, p: string)
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-[var(--teal)] to-[var(--pink)]">
             <span className="text-4xl">👶</span>
           </div>
-          <div className="text-2xl font-semibold">BabyLog</div>
+          <div className="text-2xl font-semibold">BabyTracker</div>
         </div>
         <div className="space-y-4">
           <input type="text" placeholder="用戶名" value={username} onChange={e => setUsername(e.target.value)} className="field w-full" autoComplete="username" />

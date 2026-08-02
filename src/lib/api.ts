@@ -2,15 +2,27 @@ import type { BabyProfile, ExcreteLog, FeedLog, WeightLog } from './types'
 
 const API_BASE = import.meta.env.VITE_API_BASE || 'https://babylog-api.baronjetso.workers.dev'
 
-let token: string | null = localStorage.getItem('babylog_token')
+let token: string | null = (() => {
+  const t = localStorage.getItem('babytracker_token')
+  if (t !== null) return t
+  // one-time migration from the old key
+  const old = localStorage.getItem('babylog_token')
+  if (old !== null) {
+    localStorage.setItem('babytracker_token', old)
+    localStorage.removeItem('babylog_token')
+    return old
+  }
+  return null
+})()
 
 export function setToken(t: string) {
   token = t
-  localStorage.setItem('babylog_token', t)
+  localStorage.setItem('babytracker_token', t)
 }
 
 export function clearToken() {
   token = null
+  localStorage.removeItem('babytracker_token')
   localStorage.removeItem('babylog_token')
 }
 

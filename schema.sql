@@ -1,4 +1,4 @@
--- BabyLog D1 Schema
+-- BabyTracker D1 Schema
 -- Run: wrangler d1 execute babylog --file=schema.sql
 
 CREATE TABLE IF NOT EXISTS users (

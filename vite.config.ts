@@ -11,8 +11,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'icons.svg'],
       manifest: {
-        name: 'BabyLog',
-        short_name: 'BabyLog',
+        name: 'BabyTracker',
+        short_name: 'BabyTracker',
         description: '寶寶餵奶排泄記錄',
         theme_color: '#0f172a',
         background_color: '#0f172a',

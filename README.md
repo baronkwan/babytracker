@@ -1,4 +1,4 @@
-# BabyLog — 嬰兒記錄 App / Baby Tracking App
+# BabyTracker — 嬰兒記錄 App / Baby Tracking App
 
 A family baby tracker with real-time cloud sync — feeds, excretes, and weight in one place.
 家庭共用嘅嬰兒記錄 App：餵奶、排泄、體重，一頁搞掂，多裝置即時同步。
