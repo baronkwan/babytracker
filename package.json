@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "deploy:pages": "wrangler pages deploy dist --branch production",
+    "deploy:pages": "wrangler pages deploy dist --project-name babytracker --branch production",
     "deploy:worker": "wrangler deploy -c wrangler.toml"
   },
   "dependencies": {
