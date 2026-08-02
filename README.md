@@ -70,8 +70,8 @@ VITE_API_BASE=http://localhost:8787 bun run dev
 
 | What | URL |
 |------|-----|
-| App (Cloudflare Pages) | https://babylog-1pe.pages.dev |
-| API (Worker) | https://babytracker-api.baronjetso.workers.dev |
+| App (Cloudflare Pages) | https://babylog-1pe.pages.dev (old project url) |
+| API (Worker) | https://babytracker-api.<CLOUDFLARE_ACCOUNTNAME>.workers.dev |
 | GitHub | https://github.com/baronkwan/babytracker |
 
 > ℹ️ The Pages project is named `babytracker` (renamed from `babylog`), but its
@@ -101,7 +101,7 @@ bun run deploy:worker
 
 ### 5. Deploy Frontend (Pages)
 ```bash
-cp .env.example .env   # VITE_API_BASE=https://babytracker-api.baronjetso.workers.dev
+cp .env.example .env   # VITE_API_BASE=https://babytracker-api.<CLOUDFLARE_ACCOUNTNAME>.workers.dev
 bun run build
 bun run deploy:pages   # deploys to the production branch ('production')
 ```
@@ -110,7 +110,7 @@ bun run deploy:pages   # deploys to the production branch ('production')
 
 ### 6. Create the first admin account
 ```http
-POST https://babytracker-api.baronjetso.workers.dev/api/admin/create-user
+POST https://babytracker-api.<CLOUDFLARE_ACCOUNTNAME>.workers.dev/api/admin/create-user
 Content-Type: application/json
 
 {
