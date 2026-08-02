@@ -102,10 +102,15 @@ export default function App() {
   const { token, username, login, logout } = useAuth()
 
   useEffect(() => {
+    // Tombstones must be filtered at initial load too, otherwise a deleted
+    // row that still sits in localStorage would enter state and make the
+    // duplicate guard block re-adding the same datetime (while History,
+    // which filters after the cloud refresh, would not show it).
+    const deleted = new Set(loadDeletedIds())
     setBaby(loadBaby())
-    setFeeds(loadFeeds())
-    setExcretes(loadExcretes())
-    setWeights(loadWeights())
+    setFeeds(loadFeeds().filter((f) => !deleted.has(f.id)))
+    setExcretes(loadExcretes().filter((e) => !deleted.has(e.id)))
+    setWeights(loadWeights().filter((w) => !deleted.has(w.id)))
     setLoaded(true)
   }, [])
 
