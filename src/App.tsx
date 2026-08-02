@@ -12,6 +12,7 @@ import {
   hourKey,
   lastNDaysKeys,
   nowLocalTime,
+  offsetDateKey,
   parseSpeechText,
   sideLabel,
   todayExcretes,
@@ -740,7 +741,8 @@ function CombinedForm({ baby, addFeed, addExcrete, setTab }: {
   }
   const applyParse = () => {
     const r = parseSpeechText(speechInput)
-    if (r.breastVolume === 0 && r.formulaVolume === 0 && !r.excreteType) {
+    const nothing = r.breastVolume === 0 && r.formulaVolume === 0 && !r.excreteType && !r.color && !r.texture && !r.time
+    if (nothing) {
       setParseErr(true)
       return
     }
@@ -752,6 +754,10 @@ function CombinedForm({ baby, addFeed, addExcrete, setTab }: {
       setPeeSize(r.peeSize)
       setPooSize(r.pooSize)
     }
+    if (r.color) setColor(r.color)
+    if (r.texture) setTexture(r.texture)
+    if (r.time) setTime(r.time)
+    if (r.dayOffset !== 0) setDate(offsetDateKey(r.dayOffset))
     setSpeechInput('')
   }
 
@@ -824,8 +830,11 @@ function CombinedForm({ baby, addFeed, addExcrete, setTab }: {
               解析
             </button>
           </div>
-          {parseErr && <div className="mt-2 text-xs text-red-400">未辨識到餵奶或排泄內容，試下：「60ml 母乳 有尿」</div>}
-          <div className="mt-2 text-[10px] text-[var(--muted)]">iPhone 撳鍵盤個 🎤 聽寫，講完再撳「解析」，填好 review 先儲存</div>
+          {parseErr && <div className="mt-2 text-xs text-red-400">未辨識到內容，試下跟住下面嘅講法</div>}
+          <button onClick={() => setSpeechInput('今日 下午2點 70ml 母乳 30ml 配方奶 有尿有屎 黃色 軟')} className="mt-2 block text-left text-[10px] leading-relaxed text-[var(--muted)]">
+            💡 推薦講法（撳即自動填）：「今日 下午2點 70ml 母乳 30ml 配方奶 有尿有屎 黃色 軟」
+          </button>
+          <div className="mt-1 text-[10px] text-[var(--muted)]">iPhone 撳鍵盤個 🎤 聽寫，講完撳「解析」，填好 review 先儲存</div>
         </div>
 
         {/* Time */}

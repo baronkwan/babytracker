@@ -1,6 +1,7 @@
 import { differenceInCalendarDays, format, formatDistanceToNowStrict, isToday, parseISO } from 'date-fns'
 import { zhTW } from 'date-fns/locale'
 import type { BabyProfile, ExcreteLog, FeedLog, Unit } from './types'
+import { POOP_COLORS, POOP_TEXTURES } from './types'
 
 export function dayKey(iso: string) {
   return format(parseISO(iso), 'yyyy-MM-dd')
@@ -11,19 +12,27 @@ export function hourKey(iso: string) {
 }
 
 // Parse free-form speech/text into form fields, e.g.
-// "70ml 母乳 30ml 配方奶 有尿有屎" → breast 70, formula 30, excrete both.
+// "今日 下午2點 70ml 母乳 30ml 配方奶 有尿有屎 黃色 軟" → date today,
+// time 14:00, breast 70, formula 30, excrete both, color 黃色, texture 軟.
 // Milk keywords pair with numbers in text order (first keyword ↔ first
 // number, etc.); time/count numbers (8點/3次) are filtered out.
-// Excrete is detected from 尿/屎/便 keywords, sizes from 少/多.
+// Excrete: 尿/屎/便 keywords, sizes 少/多, colors/textures by label.
 export function parseSpeechText(text: string): {
   breastVolume: number
   formulaVolume: number
   excreteType: 'wet' | 'poop' | 'both' | null
   peeSize: string
   pooSize: string
+  dayOffset: number
+  time: string | null
+  color: string
+  texture: string
 } {
   const s = text.toLowerCase()
-  const nums = [...s.matchAll(/(\d+(?:\.\d+)?)(?!\s*(?:點|時|分|次|日|天))/g)].map((m) => Number(m[1]))
+  // Numbers for milk volumes: exclude digits that are part of time/count
+  // expressions (12點 / 8:30 / 8點45 / 3次 / 今日). Lookbehind blocks
+  // minute digits after 點/時/colon; lookahead blocks time/count suffixes.
+  const nums = [...s.matchAll(/(?<![\d點時分:：])(\d+(?:\.\d+)?)(?!\d)(?!\s*(?:點|時|分|次|日|天|[:：]))/g)].map((m) => Number(m[1]))
   const kwOrder = [...s.matchAll(/母乳|母奶|親餵|配方|奶粉/g)].map((m) => m[0])
   const kwNum = (re: RegExp) => {
     const i = kwOrder.findIndex((k) => re.test(k))
@@ -31,12 +40,41 @@ export function parseSpeechText(text: string): {
   }
   const hasWet = /尿|pee/.test(s)
   const hasPoo = /屎|便|poo/.test(s)
+
+  // Date: 今日/今天 0, 尋日/昨日/昨天 -1, 前日/前天 -2
+  const dayOffset = /前日|前天/.test(s) ? -2 : /尋日|昨日|昨天/.test(s) ? -1 : 0
+
+  // Time: 凌晨/早上/上午/中午/下午/傍晚/晚上/夜晚/今晚 + H點(半|MM) or HH:MM
+  let time: string | null = null
+  const tq = /(凌晨|半夜|早上|朝早|上午|中午|下午|傍晚|下晝|晏晝|晚上|夜晚|今晚)/.exec(s)
+  const qual = tq?.[1] ?? ''
+  const cn = s.match(/(\d{1,2})\s*(?:點|时|時)(半|(\d{1,2}))?(?:分)?/)
+  const colon = s.match(/(\d{1,2})[:：](\d{1,2})/)
+  if (cn) {
+    let h = Number(cn[1])
+    const m = cn[2] === '半' ? 30 : cn[3] ? Number(cn[3]) : 0
+    const eve = /晚上|夜晚|傍晚|半夜/.test(qual)
+    const late = /晚上|夜晚|凌晨|半夜/.test(qual)
+    if ((eve || /下午|下晝|晏晝/.test(qual)) && h < 12) h += 12
+    if (late && h === 12) h = 0
+    time = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+  } else if (colon) {
+    time = `${colon[1].padStart(2, '0')}:${colon[2].padStart(2, '0')}`
+  }
+
+  const colorMatch = (POOP_COLORS as string[]).find((c) => s.includes(c.toLowerCase()))
+  const textureMatch = (POOP_TEXTURES as string[]).find((t) => s.includes(t))
+
   return {
     breastVolume: kwNum(/母乳|母奶|親餵/),
     formulaVolume: kwNum(/配方|奶粉/),
     excreteType: hasWet && hasPoo ? 'both' : hasPoo ? 'poop' : hasWet ? 'wet' : null,
     peeSize: /少(?:量)?尿/.test(s) ? '少' : /多(?:量)?尿/.test(s) ? '多' : '',
     pooSize: /少(?:量)?[屎便]/.test(s) ? '少' : /多(?:量)?[屎便]/.test(s) ? '多' : '',
+    dayOffset,
+    time,
+    color: /啡色|棕色/.test(s) ? '棕色' : (colorMatch ?? ''),
+    texture: textureMatch ?? '',
   }
 }
 
@@ -46,6 +84,12 @@ export function todayKey() {
 
 export function todayLocal() {
   return format(new Date(), 'yyyy-MM-dd')
+}
+
+export function offsetDateKey(offsetDays: number) {
+  const d = new Date()
+  d.setDate(d.getDate() + offsetDays)
+  return format(d, 'yyyy-MM-dd')
 }
 
 export function nowLocalTime() {
