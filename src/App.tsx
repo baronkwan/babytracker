@@ -938,9 +938,9 @@ function History({ allLogs, deleteLog, unit }: { allLogs: LogEntry[]; deleteLog:
 // CHARTS
 // ──────────────────────────────────────────────
 const PERIODS = [
-  { id: '7d', label: '7天', days: 7, barW: 28, spacing: 64, labelEvery: 1 },
-  { id: '1m', label: '1月', days: 30, barW: 12, spacing: 28, labelEvery: 5 },
-  { id: '3m', label: '3月', days: 90, barW: 8, spacing: 20, labelEvery: 10 },
+  { id: '7d', label: '7天', days: 7, gap: 6, labelEvery: 1 },
+  { id: '1m', label: '1月', days: 30, gap: 2, labelEvery: 5 },
+  { id: '3m', label: '3月', days: 90, gap: 1, labelEvery: 10 },
 ] as const
 type PeriodId = (typeof PERIODS)[number]['id']
 
@@ -993,7 +993,7 @@ function Charts({ feeds, excretes, weights, unit }: { feeds: FeedLog[]; excretes
           <span className="text-sm font-semibold">餵奶量趨勢</span>
           <span className="text-xs text-[var(--muted)]">近{cfg.days}天 · {unitLabel(unit)}/日</span>
         </div>
-        <BarChart labels={label} data={feedVol} max={maxVol} color="var(--teal)" h={CHART_H} barW={cfg.barW} spacing={cfg.spacing} labelEvery={cfg.labelEvery} />
+        <BarChart labels={label} data={feedVol} max={maxVol} color="var(--teal)" h={CHART_H} gap={cfg.gap} labelEvery={cfg.labelEvery} />
       </div>
 
       {/* Excrete chart */}
@@ -1002,7 +1002,7 @@ function Charts({ feeds, excretes, weights, unit }: { feeds: FeedLog[]; excretes
           <span className="text-sm font-semibold">排泄頻率</span>
           <span className="text-xs text-[var(--muted)]">近{cfg.days}天 · 次/日</span>
         </div>
-        <BarChart labels={label} data={excByDay.map((d) => d.total)} max={maxEx} color="var(--pink)" h={CHART_H} barW={cfg.barW} spacing={cfg.spacing} labelEvery={cfg.labelEvery} />
+        <BarChart labels={label} data={excByDay.map((d) => d.total)} max={maxEx} color="var(--pink)" h={CHART_H} gap={cfg.gap} labelEvery={cfg.labelEvery} />
       </div>
 
       {/* Weight chart */}
@@ -1011,7 +1011,7 @@ function Charts({ feeds, excretes, weights, unit }: { feeds: FeedLog[]; excretes
           <span className="text-sm font-semibold">體重趨勢</span>
           <span className="text-xs text-[var(--muted)]">近{cfg.days}天 · g</span>
         </div>
-        <BarChart labels={label} data={weightSeries} max={maxW} color="var(--blue)" h={CHART_H} barW={cfg.barW} spacing={cfg.spacing} labelEvery={cfg.labelEvery} />
+        <BarChart labels={label} data={weightSeries} max={maxW} color="var(--blue)" h={CHART_H} gap={cfg.gap} labelEvery={cfg.labelEvery} />
       </div>
 
       <div className="text-center text-xs text-[var(--muted)]">數據僅供參考 · 如有異常請即時聯絡醫生</div>
@@ -1019,47 +1019,39 @@ function Charts({ feeds, excretes, weights, unit }: { feeds: FeedLog[]; excretes
   )
 }
 
-function BarChart({ labels, data, max, color, h, barW = 28, spacing = 64, labelEvery = 1 }: { labels: string[]; data: number[]; max: number; color: string; h: number; barW?: number; spacing?: number; labelEvery?: number }) {
-  const totalW = labels.length * spacing + 16
-  const chartH = h
-  const showValues = spacing >= 40
+function BarChart({ labels, data, max, color, h, gap = 4, labelEvery = 1 }: { labels: string[]; data: number[]; max: number; color: string; h: number; gap?: number; labelEvery?: number }) {
+  // Responsive flex bars: flex-1 fills the container, so every period fits with no
+  // horizontal scroll — bars just get narrower as the day count grows.
+  const chartH = h - 24
+  const showValues = data.length <= 14
+  const barPx = (v: number) => (max > 0 ? Math.max((v / max) * (chartH - 14), v > 0 ? 2 : 0) : 0)
 
   return (
-    <div className="-mx-4 overflow-x-auto scroll-hide px-4">
-      <svg viewBox={`0 0 ${totalW} ${chartH}`} width={totalW} height={chartH} className="mx-auto block">
-        {/* Grid lines */}
+    <div>
+      <div className="relative" style={{ height: chartH }}>
         {[0, 0.5, 1].map((frac) => (
-          <line
+          <div
             key={frac}
-            x1={0}
-            y1={chartH - 20 - frac * (chartH - 32)}
-            x2={totalW}
-            y2={chartH - 20 - frac * (chartH - 32)}
-            stroke="var(--border)"
-            strokeDasharray="4,4"
+            className="pointer-events-none absolute left-0 right-0 border-t border-dashed border-[var(--border)]"
+            style={{ bottom: frac * (chartH - 14) }}
           />
         ))}
-        {data.map((v, i) => {
-          const barH = max > 0 ? ((v / max) * (chartH - 32)) : 0
-          const x = i * spacing + (spacing - barW) / 2
-          const y = chartH - 20 - barH
-          return (
-            <g key={i}>
-              <rect x={x} y={y} width={barW} height={Math.max(barH, 2)} rx={Math.min(6, barW / 2)} fill={color} opacity={0.85} />
-              {showValues && (
-                <text x={x + barW / 2} y={y - 6} textAnchor="middle" fill="var(--muted)" fontSize="10" fontFamily="SF Pro Text,sans-serif">
-                  {v > 0 ? v : ''}
-                </text>
-              )}
-              {i % labelEvery === 0 && (
-                <text x={x + barW / 2} y={chartH - 2} textAnchor="middle" fill="var(--muted)" fontSize="10" fontFamily="SF Pro Text,sans-serif">
-                  {labels[i]}
-                </text>
-              )}
-            </g>
-          )
-        })}
-      </svg>
+        <div className="absolute inset-0 flex items-end" style={{ gap }}>
+          {data.map((v, i) => (
+            <div key={i} className="flex h-full flex-1 flex-col items-center justify-end">
+              {showValues && v > 0 && <span className="mb-1 text-[9px] leading-none text-[var(--muted)]">{v}</span>}
+              <div className="w-full rounded-t-[3px]" style={{ height: barPx(v), background: color, opacity: 0.85 }} />
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="mt-1 flex" style={{ gap }}>
+        {labels.map((l, i) => (
+          <div key={i} className="flex-1 text-center text-[9px] leading-4 text-[var(--muted)]">
+            {i % labelEvery === 0 ? l : ''}
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
