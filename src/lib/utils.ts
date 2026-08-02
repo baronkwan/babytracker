@@ -33,7 +33,7 @@ export function parseSpeechText(text: string): {
   // Numbers for milk volumes: exclude digits that are part of time/count
   // expressions (12點 / 8:30 / 8點45 / 3次 / 今日). Lookbehind blocks
   // minute digits after 點/時/colon; lookahead blocks time/count suffixes.
-  const nums = [...s.matchAll(/(?<![\d點時分:：])(\d+(?:\.\d+)?)(?!\d)(?!\s*(?:點|時|分|次|日|天|[:：]))/g)].map((m) => Number(m[1]))
+  const nums = [...s.matchAll(/(?<![\d點時分:：])(\d+(?:\.\d+)?)(?!\d)(?!\s*(?:點|時|分|次|日|天|[:：]|min))/g)].map((m) => Number(m[1]))
   const kwOrder = [...s.matchAll(/母乳|母奶|親餵|配方|奶粉/g)].map((m) => m[0])
   const kwNum = (re: RegExp) => {
     const i = kwOrder.findIndex((k) => re.test(k))
