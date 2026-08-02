@@ -1,4 +1,4 @@
-name = "babylog-api"
+name = "babytracker-api"
 main = "worker/index.ts"
 compatibility_date = "2025-07-01"
 
@@ -12,4 +12,4 @@ database_name = "babylog"
 database_id = "7d8457e7-f081-4722-84a9-213f74a0333e"   # babylog-db
 
 [env.production]
-name = "babylog-api"
+name = "babytracker-api"

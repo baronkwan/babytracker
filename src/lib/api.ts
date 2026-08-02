@@ -1,6 +1,6 @@
 import type { BabyProfile, ExcreteLog, FeedLog, WeightLog } from './types'
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'https://babylog-api.baronjetso.workers.dev'
+const API_BASE = import.meta.env.VITE_API_BASE || 'https://babytracker-api.baronjetso.workers.dev'
 
 let token: string | null = (() => {
   const t = localStorage.getItem('babytracker_token')
