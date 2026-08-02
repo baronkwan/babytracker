@@ -762,10 +762,12 @@ function CombinedForm({ baby, feeds, excretes, addFeed, addExcrete, setTab }: {
     if (r.color) setColor(r.color)
     if (r.texture) setTexture(r.texture)
     if (r.time) setTime(r.time)
+    if (r.duration > 0) setDuration(String(r.duration))
     if (r.dayOffset !== 0) setDate(offsetDateKey(r.dayOffset))
     const parts: string[] = []
     if (r.breastVolume > 0) parts.push(`母乳 ${r.breastVolume}`)
     if (r.formulaVolume > 0) parts.push(`配方奶 ${r.formulaVolume}`)
+    if (r.duration > 0) parts.push(`時長 ${r.duration}分鐘`)
     if (r.excreteType) parts.push(r.excreteType === 'both' ? '尿+便' : r.excreteType === 'wet' ? '淨尿' : '淨便')
     if (r.time) parts.push(`時間 ${r.time}`)
     if (r.color) parts.push(`顏色 ${r.color}`)
@@ -860,8 +862,8 @@ function CombinedForm({ baby, feeds, excretes, addFeed, addExcrete, setTab }: {
           </div>
           {parseErr && <div className="mt-2 text-xs text-red-400">未辨識到內容，試下跟住下面嘅講法</div>}
           {parseMsg && <div className="mt-2 text-xs text-[var(--teal)]">{parseMsg}</div>}
-          <button onClick={() => setSpeechInput('今日 下午2點 70ml 母乳 30ml 配方奶 有尿有屎 黃色 軟')} className="mt-2 block text-left text-[10px] leading-relaxed text-[var(--muted)]">
-            💡 推薦講法（撳即自動填）：「今日 下午2點 70ml 母乳 30ml 配方奶 有尿有屎 黃色 軟」
+          <button onClick={() => setSpeechInput('今日 下午2點 70ml 母乳 30ml 配方奶 30分鐘 有尿有屎 黃色 軟')} className="mt-2 block text-left text-[10px] leading-relaxed text-[var(--muted)]">
+            💡 推薦講法（撳即自動填）：「今日 下午2點 70ml 母乳 30ml 配方奶 30分鐘 有尿有屎 黃色 軟」
           </button>
           <div className="mt-1 text-[10px] text-[var(--muted)]">iPhone 撳鍵盤個 🎤 聽寫，講完撳「解析」，填好 review 先儲存</div>
         </div>

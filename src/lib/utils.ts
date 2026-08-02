@@ -25,6 +25,7 @@ export function parseSpeechText(text: string): {
   pooSize: string
   dayOffset: number
   time: string | null
+  duration: number
   color: string
   texture: string
 } {
@@ -64,6 +65,9 @@ export function parseSpeechText(text: string): {
 
   const colorMatch = (POOP_COLORS as string[]).find((c) => s.includes(c.toLowerCase()))
   const textureMatch = (POOP_TEXTURES as string[]).find((t) => s.includes(t))
+  // Duration: "30分鐘" / "30分" / "30min" — the number is excluded from
+  // milk volumes by the 分 suffix filter above.
+  const durM = s.match(/(\d{1,3})\s*(?:分鐘|分|min|mins)/)
 
   return {
     breastVolume: kwNum(/母乳|母奶|親餵/),
@@ -73,6 +77,7 @@ export function parseSpeechText(text: string): {
     pooSize: /少(?:量)?[屎便]/.test(s) ? '少' : /多(?:量)?[屎便]/.test(s) ? '多' : '',
     dayOffset,
     time,
+    duration: durM ? Number(durM[1]) : 0,
     color: /啡色|棕色/.test(s) ? '棕色' : (colorMatch ?? ''),
     texture: textureMatch ?? '',
   }
