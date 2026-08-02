@@ -839,169 +839,204 @@ function CombinedForm({ baby, feeds, excretes, addFeed, addExcrete, setTab }: {
   }
 
   return (
-    <div className="space-y-4 rise">
+    <div className="space-y-4 rise pb-2">
+      {/* Quick speech/text input */}
       <div className="card rounded-2xl p-4">
-        {/* Quick speech/text input */}
-        <div className="mb-5">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">快速輸入</span>
-          </div>
-          <div className="flex gap-2">
-            <input
-              value={speechInput}
-              onChange={(e) => setSpeechInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && applyParse()}
-              placeholder="例：70ml 母乳 30ml 配方奶 有尿有屎"
-              className="field min-w-0 flex-1"
-              autoComplete="off"
-              autoCorrect="off"
-              spellCheck={false}
-            />
-            {supportsSR && (
-              <button onClick={startListening} aria-label="語音輸入" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--surface2)] text-[var(--teal)] active:bg-[var(--surface)]">
-                <Mic size={18} />
-              </button>
-            )}
-            <button onClick={applyParse} className="shrink-0 rounded-xl bg-[var(--teal)] px-4 text-sm font-semibold text-white active:opacity-80">
-              解析
+        <div className="mb-2 flex items-center justify-between">
+          <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">快速輸入</span>
+        </div>
+        <div className="flex gap-2">
+          <input
+            value={speechInput}
+            onChange={(e) => setSpeechInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && applyParse()}
+            placeholder="例：70ml 母乳 30ml 配方奶 有尿有屎"
+            className="field min-w-0 flex-1"
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck={false}
+          />
+          {supportsSR && (
+            <button onClick={startListening} aria-label="語音輸入" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--surface2)] text-[var(--teal)] active:bg-[var(--surface)]">
+              <Mic size={18} />
             </button>
-          </div>
-          {parseErr && <div className="mt-2 text-xs text-red-400">未辨識到內容，試下跟住下面嘅講法</div>}
-          {parseMsg && <div className="mt-2 text-xs text-[var(--teal)]">{parseMsg}</div>}
-          <button onClick={() => setSpeechInput('今日 下午2點 70ml 母乳 30ml 配方奶 30分鐘 有尿有屎 黃色 軟')} className="mt-2 block text-left text-[10px] leading-relaxed text-[var(--muted)]">
-            💡 推薦講法（撳即自動填）：「今日 下午2點 70ml 母乳 30ml 配方奶 30分鐘 有尿有屎 黃色 軟」
+          )}
+          <button onClick={applyParse} className="shrink-0 rounded-xl bg-[var(--teal)] px-4 text-sm font-semibold text-white active:opacity-80">
+            解析
           </button>
-          <div className="mt-1 text-[10px] text-[var(--muted)]">iPhone 撳鍵盤個 🎤 聽寫，講完撳「解析」，填好 review 先儲存</div>
         </div>
+        {parseErr && <div className="mt-2 text-xs text-red-400">未辨識到內容，試下跟住下面嘅講法</div>}
+        {parseMsg && <div className="mt-2 text-xs font-medium text-[var(--teal)]">{parseMsg}</div>}
+        <button onClick={() => setSpeechInput('今日 下午2點 70ml 母乳 30ml 配方奶 30分鐘 有尿有屎 黃色 軟')} className="mt-2 block text-left text-[10px] leading-relaxed text-[var(--muted)]">
+          💡 推薦講法（撳即自動填）：「今日 下午2點 70ml 母乳 30ml 配方奶 30分鐘 有尿有屎 黃色 軟」
+        </button>
+      </div>
 
-        {/* Time */}
-        <div className="mb-5">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">時間</span>
-            <button onClick={() => { setDate(todayLocal()); setTime(nowLocalTime()) }} className="text-xs font-semibold text-[var(--teal)] active:text-[var(--teal-dim)]">
-              現在
-            </button>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <input type="date" value={date} max={todayLocal()} onChange={(e) => setDate(e.target.value)} className="field" />
-            <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="field" />
-          </div>
+      {/* Time */}
+      <div className="card rounded-2xl p-4">
+        <div className="mb-2 flex items-center justify-between">
+          <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">時間</span>
+          <button onClick={() => { setDate(todayLocal()); setTime(nowLocalTime()) }} className="text-xs font-semibold text-[var(--teal)] active:opacity-60">
+            現在
+          </button>
         </div>
+        <div className="grid grid-cols-2 gap-2">
+          <input type="date" value={date} max={todayLocal()} onChange={(e) => setDate(e.target.value)} className="field" />
+          <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="field" />
+        </div>
+      </div>
 
-        {/* ── Feed ── */}
-        <div className="mb-5">
-          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">餵奶</div>
-          <div className="mb-4 grid grid-cols-2 gap-2">
-            <div>
-              <div className="mb-1 text-xs text-[var(--muted)]">母乳 ({unitLabel(baby.unit)})</div>
-              <input value={breast} onChange={(e) => setBreast(e.target.value)} placeholder="0" inputMode="numeric" className="field" />
-            </div>
-            <div>
-              <div className="mb-1 text-xs text-[var(--muted)]">配方奶 ({unitLabel(baby.unit)})</div>
-              <input value={formula} onChange={(e) => setFormula(e.target.value)} placeholder="0" inputMode="numeric" className="field" />
-            </div>
-          </div>
+      {/* ── Feed ── */}
+      <div className="card rounded-2xl p-4">
+        <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">餵奶</div>
 
-          <div className="mb-4">
-            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">時長 (分鐘)</div>
-            <div className="flex flex-wrap gap-2">
-              {DURATION_CHIPS.map((v) => (
-                <button key={v} onClick={() => setDuration(String(v))} className={`chip text-sm ${String(v) === duration ? 'active' : ''}`}>
-                  {v} min
-                </button>
-              ))}
-            </div>
-            <input value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="自訂" inputMode="numeric" className="field mt-2" />
-          </div>
-
-          <div>
-            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">邊別（母乳）</div>
-            <div className="flex gap-2">
-              {(['left', 'right', 'both'] as const).map((s) => (
-                <button key={s} onClick={() => setSide(s)} className={`chip flex-1 text-center ${side === s ? 'active' : ''}`}>
-                  {sideLabel(s)}
+        <div className="mb-4 grid grid-cols-2 gap-2">
+          <div className="min-w-0">
+            <div className="mb-1.5 text-xs font-medium text-[var(--muted)]">母乳 ({unitLabel(baby.unit)})</div>
+            <input value={breast} onChange={(e) => setBreast(e.target.value)} placeholder="0" inputMode="numeric" className="field py-3 text-center text-lg font-semibold" />
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {[30, 60, 90, 120, 150].map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setBreast(breast === String(v) ? '' : String(v))}
+                  className={`min-w-0 rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors ${breast === String(v) ? 'border-[var(--teal)] bg-[var(--teal-dim)] text-[var(--teal)]' : 'border-[var(--border)] bg-[var(--surface2)] text-[var(--muted)]'}`}
+                >
+                  {v}
                 </button>
               ))}
             </div>
           </div>
+          <div className="min-w-0">
+            <div className="mb-1.5 text-xs font-medium text-[var(--muted)]">配方奶 ({unitLabel(baby.unit)})</div>
+            <input value={formula} onChange={(e) => setFormula(e.target.value)} placeholder="0" inputMode="numeric" className="field py-3 text-center text-lg font-semibold" />
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {[30, 60, 90, 120, 150].map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setFormula(formula === String(v) ? '' : String(v))}
+                  className={`min-w-0 rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors ${formula === String(v) ? 'border-[var(--teal)] bg-[var(--teal-dim)] text-[var(--teal)]' : 'border-[var(--border)] bg-[var(--surface2)] text-[var(--muted)]'}`}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
-        {/* ── Excrete ── */}
-        <div className="mb-5 border-t border-[var(--border)] pt-4">
-          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">排泄（可略過）</div>
-          <div className="mb-4 flex gap-2">
-            {(['wet', 'poop', 'both'] as const).map((t) => (
-              <button
-                key={t}
-                onClick={() => setExType(exType === t ? 'none' : t)}
-                className={`chip flex-1 text-center text-sm ${exType === t ? 'pink active' : ''}`}
-              >
-                {t === 'wet' ? '淨尿' : t === 'poop' ? '淨便' : '尿+便'}
+        <div className="mb-4">
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">時長（分鐘）</div>
+          <div className="flex flex-wrap gap-2">
+            {DURATION_CHIPS.map((v) => (
+              <button key={v} onClick={() => setDuration(String(v))} className={`chip text-sm min-w-0 ${String(v) === duration ? 'active' : ''}`}>
+                {v}
               </button>
             ))}
           </div>
+          <input value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="自訂" inputMode="numeric" className="field mt-2" />
+        </div>
 
-          {showPee && (
-            <div className="mb-4">
-              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">尿量</div>
-              <div className="flex gap-2">
+        <div>
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">邊別（母乳）</div>
+          <div className="grid grid-cols-3 gap-1 rounded-2xl bg-[var(--surface2)] p-1">
+            {(['left', 'right', 'both'] as const).map((s) => (
+              <button
+                key={s}
+                onClick={() => setSide(s)}
+                className={`min-w-0 truncate rounded-xl px-2 py-2.5 text-sm font-semibold transition-colors ${side === s ? 'bg-[var(--surface)] text-[var(--teal)] shadow-sm' : 'text-[var(--muted)]'}`}
+              >
+                {sideLabel(s)}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Excrete ── */}
+      <div className="card rounded-2xl p-4">
+        <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">排泄（可略過）</div>
+        <div className="grid grid-cols-3 gap-1 rounded-2xl bg-[var(--surface2)] p-1">
+          {(['wet', 'poop', 'both'] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setExType(exType === t ? 'none' : t)}
+              className={`min-w-0 truncate rounded-xl px-2 py-2.5 text-sm font-semibold transition-colors ${exType === t ? 'bg-[var(--surface)] text-[var(--pink)] shadow-sm' : 'text-[var(--muted)]'}`}
+            >
+              {t === 'wet' ? '淨尿' : t === 'poop' ? '淨便' : '尿+便'}
+            </button>
+          ))}
+        </div>
+
+        {showPee && (
+          <div className="mt-4">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">尿量</div>
+            <div className="grid grid-cols-2 gap-1 rounded-2xl bg-[var(--surface2)] p-1">
+              {(['少', '多'] as const).map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setPeeSize(s)}
+                  className={`min-w-0 truncate rounded-xl px-2 py-2.5 text-sm font-semibold transition-colors ${peeSize === s ? 'bg-[var(--surface)] text-[var(--pink)] shadow-sm' : 'text-[var(--muted)]'}`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {showPoo && (
+          <>
+            <div className="mt-4">
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">便量</div>
+              <div className="grid grid-cols-2 gap-1 rounded-2xl bg-[var(--surface2)] p-1">
                 {(['少', '多'] as const).map((s) => (
-                  <button key={s} onClick={() => setPeeSize(s)} className={`chip flex-1 text-center text-sm ${peeSize === s ? 'pink active' : ''}`}>
+                  <button
+                    key={s}
+                    onClick={() => setPooSize(s)}
+                    className={`min-w-0 truncate rounded-xl px-2 py-2.5 text-sm font-semibold transition-colors ${pooSize === s ? 'bg-[var(--surface)] text-[var(--pink)] shadow-sm' : 'text-[var(--muted)]'}`}
+                  >
                     {s}
                   </button>
                 ))}
               </div>
             </div>
-          )}
-
-          {showPoo && (
-            <>
-              <div className="mb-4">
-                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">便量</div>
-                <div className="flex gap-2">
-                  {(['少', '多'] as const).map((s) => (
-                    <button key={s} onClick={() => setPooSize(s)} className={`chip flex-1 text-center text-sm ${pooSize === s ? 'pink active' : ''}`}>
-                      {s}
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <div className="min-w-0">
+                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">顏色</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {POOP_COLORS.map((c) => (
+                    <button key={c} onClick={() => setColor(c)} className={`chip text-sm min-w-0 ${c === color ? 'pink active' : ''}`}>
+                      {c}
                     </button>
                   ))}
                 </div>
               </div>
-              <div className="mb-4 grid grid-cols-2 gap-3">
-                <div>
-                  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">顏色</div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {POOP_COLORS.map((c) => (
-                      <button key={c} onClick={() => setColor(c)} className={`chip text-sm ${c === color ? 'pink active' : ''}`}>
-                        {c}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">質地</div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {POOP_TEXTURES.map((t) => (
-                      <button key={t} onClick={() => setTexture(t)} className={`chip text-sm ${t === texture ? 'pink active' : ''}`}>
-                        {t}
-                      </button>
-                    ))}
-                  </div>
+              <div className="min-w-0">
+                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">質地</div>
+                <div className="flex flex-wrap gap-1.5">
+                  {POOP_TEXTURES.map((t) => (
+                    <button key={t} onClick={() => setTexture(t)} className={`chip text-sm min-w-0 ${t === texture ? 'pink active' : ''}`}>
+                      {t}
+                    </button>
+                  ))}
                 </div>
               </div>
-            </>
-          )}
-        </div>
+            </div>
+          </>
+        )}
+      </div>
 
-        {/* Notes */}
-        <div className="mb-5">
-          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">備註</div>
-          <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="選填" className="field" />
-        </div>
+      {/* Notes */}
+      <div className="card rounded-2xl p-4">
+        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">備註</div>
+        <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="選填" className="field" />
+      </div>
 
-        <button onClick={save} disabled={!hasFeed && !hasExcrete} className="btn-primary flex items-center justify-center gap-2">
+      {/* Sticky save bar */}
+      <div className="sticky bottom-0 -mx-4 mt-5 border-t border-[var(--border)] bg-[var(--bg)]/90 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 backdrop-blur-md">
+        {saveMsg && <div className="mb-2 text-center text-xs font-medium text-red-400">{saveMsg}</div>}
+        <button onClick={save} disabled={!hasFeed && !hasExcrete} className="btn-primary flex w-full items-center justify-center gap-2 py-3.5 text-base">
           ✓ 儲存記錄
         </button>
-        {saveMsg && <div className="mt-2 text-center text-xs text-red-400">{saveMsg}</div>}
       </div>
     </div>
   )
