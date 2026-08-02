@@ -66,6 +66,18 @@ VITE_API_BASE=http://localhost:8787 bun run dev
 # → http://localhost:5173
 ```
 
+## Live URLs / 現有部署
+
+| What | URL |
+|------|-----|
+| App (Cloudflare Pages) | https://babylog-1pe.pages.dev |
+| API (Worker) | https://babytracker-api.baronjetso.workers.dev |
+| GitHub | https://github.com/baronkwan/babytracker |
+
+> ℹ️ The Pages project is named `babytracker` (renamed from `babylog`), but its
+> pages.dev subdomain (`babylog-1pe`) is immutable — it stays as-is. `deploy:pages`
+> pins `--project-name babytracker`.
+
 ## Deployment / 部署
 
 ### 1. D1 database
@@ -89,7 +101,7 @@ bun run deploy:worker
 
 ### 5. Deploy Frontend (Pages)
 ```bash
-cp .env.example .env   # set VITE_API_BASE to your worker URL
+cp .env.example .env   # VITE_API_BASE=https://babytracker-api.baronjetso.workers.dev
 bun run build
 bun run deploy:pages   # deploys to the production branch ('production')
 ```
@@ -98,7 +110,7 @@ bun run deploy:pages   # deploys to the production branch ('production')
 
 ### 6. Create the first admin account
 ```http
-POST https://<your-worker>.workers.dev/api/admin/create-user
+POST https://babytracker-api.baronjetso.workers.dev/api/admin/create-user
 Content-Type: application/json
 
 {
