@@ -59,10 +59,6 @@ export function unitLabel(unit: Unit) {
   return unit === 'oz' ? 'oz' : 'ml'
 }
 
-export function feedTypeLabel(type: FeedLog['type']) {
-  return type === 'breast' ? '母乳' : '配方奶'
-}
-
 export function sideLabel(side: FeedLog['side']) {
   if (side === 'left') return '左'
   if (side === 'right') return '右'
@@ -71,9 +67,16 @@ export function sideLabel(side: FeedLog['side']) {
 }
 
 export function excreteLabel(type: ExcreteLog['type']) {
-  if (type === 'wet') return '濕尿布'
-  if (type === 'poop') return '大便'
-  return '濕+便'
+  if (type === 'wet') return '淨尿'
+  if (type === 'poop') return '淨便'
+  return '尿+便'
+}
+
+export function feedVolumeMl(f: FeedLog) {
+  const parts: string[] = []
+  if (f.breastVolume > 0) parts.push(`母乳 ${f.breastVolume}ml`)
+  if (f.formulaVolume > 0) parts.push(`配方 ${f.formulaVolume}ml`)
+  return parts.length ? parts.join(' + ') : ''
 }
 
 export function todayFeeds(feeds: FeedLog[]) {
@@ -89,7 +92,9 @@ export function todayExcretes(excretes: ExcreteLog[]) {
 export function buildDoctorText(baby: BabyProfile, feeds: FeedLog[], excretes: ExcreteLog[]) {
   const tf = todayFeeds(feeds)
   const te = todayExcretes(excretes)
-  const vol = tf.reduce((s, f) => s + (f.volume || 0), 0)
+  const bvol = tf.reduce((s, f) => s + (f.breastVolume || 0), 0)
+  const fvol = tf.reduce((s, f) => s + (f.formulaVolume || 0), 0)
+  const vol = bvol + fvol
   const wet = te.filter((e) => e.type === 'wet' || e.type === 'both').length
   const poop = te.filter((e) => e.type === 'poop' || e.type === 'both').length
   const lines = [
@@ -98,13 +103,13 @@ export function buildDoctorText(baby: BabyProfile, feeds: FeedLog[], excretes: E
     `年齡：${ageLabel(baby.dob)}`,
     '',
     `【今日】${format(new Date(), 'yyyy-MM-dd')}`,
-    `餵奶：${tf.length} 次，共 ${vol} ml`,
-    `排泄：${te.length} 次（濕 ${wet} / 便 ${poop}）`,
+    `餵奶：${tf.length} 次，共 ${vol} ml（母乳 ${bvol} / 配方 ${fvol}）`,
+    `排泄：${te.length} 次（尿 ${wet} / 便 ${poop}）`,
     '',
     '【最近餵奶】',
     ...tf.slice(0, 8).map(
       (f) =>
-        `${fmtDateTime(f.timestamp)} · ${feedTypeLabel(f.type)} · ${f.volume || 0}ml` +
+        `${fmtDateTime(f.timestamp)} · ${feedVolumeMl(f) || '記錄'}` +
         (f.duration ? ` · ${f.duration}min` : '') +
         (f.side ? ` · ${sideLabel(f.side)}` : '') +
         (f.notes ? ` · ${f.notes}` : ''),
@@ -114,6 +119,8 @@ export function buildDoctorText(baby: BabyProfile, feeds: FeedLog[], excretes: E
     ...te.slice(0, 8).map(
       (e) =>
         `${fmtDateTime(e.timestamp)} · ${excreteLabel(e.type)}` +
+        (e.peeSize ? ` · 尿量${e.peeSize}` : '') +
+        (e.pooSize ? ` · 便量${e.pooSize}` : '') +
         (e.color ? ` · ${e.color}` : '') +
         (e.consistency ? ` · ${e.consistency}` : '') +
         (e.notes ? ` · ${e.notes}` : ''),

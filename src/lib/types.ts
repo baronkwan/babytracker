@@ -1,8 +1,7 @@
-export type FeedType = 'breast' | 'formula'
 export type FeedSide = 'left' | 'right' | 'both'
 export type ExcreteType = 'wet' | 'poop' | 'both'
 export type Unit = 'ml' | 'oz'
-export type TabId = 'home' | 'feed' | 'excrete' | 'history' | 'charts'
+export type TabId = 'home' | 'record' | 'history' | 'charts'
 
 export interface BabyProfile {
   name: string
@@ -16,8 +15,8 @@ export interface FeedLog {
   id: string
   kind: 'feed'
   timestamp: string
-  type: FeedType
-  volume: number
+  breastVolume: number
+  formulaVolume: number
   duration: number
   side: FeedSide | null
   notes: string
@@ -28,6 +27,8 @@ export interface ExcreteLog {
   kind: 'excrete'
   timestamp: string
   type: ExcreteType
+  peeSize: string
+  pooSize: string
   color: string
   consistency: string
   notes: string
@@ -51,7 +52,6 @@ export const DEFAULT_BABY: BabyProfile = {
   unit: 'ml',
 }
 
-export const VOLUME_CHIPS_ML = [30, 60, 90, 120, 150, 180]
 export const DURATION_CHIPS = [5, 10, 15, 20, 30]
 export const POOP_COLORS = ['黃色', '綠色', '棕色', '黑色', '紅色', '白色']
 export const POOP_TEXTURES = ['軟', '稀', '硬', '水狀', '顆粒']

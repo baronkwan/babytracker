@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import type { BabyProfile, ExcreteLog, FeedLog, FeedType, LogEntry, TabId, Unit, WeightLog } from './lib/types'
-import { DEFAULT_BABY, DURATION_CHIPS, POOP_COLORS, POOP_TEXTURES, VOLUME_CHIPS_ML } from './lib/types'
+import type { BabyProfile, ExcreteLog, FeedLog, LogEntry, TabId, Unit, WeightLog } from './lib/types'
+import { DEFAULT_BABY, DURATION_CHIPS, POOP_COLORS, POOP_TEXTURES } from './lib/types'
 import { combineLogs, loadBaby, loadExcretes, loadFeeds, loadWeights, makeId, saveAll } from './lib/storage'
 import {
   ageLabel,
   buildDoctorText,
   dayKey,
   excreteLabel,
-  feedTypeLabel,
   fmtAgo,
   fmtDateTime,
   lastNDaysKeys,
@@ -32,6 +31,7 @@ import {
   Milk,
   MoonStar,
   Settings,
+  SquarePen,
   Stethoscope,
   Sun,
   UserPlus,
@@ -96,8 +96,9 @@ export default function App() {
     id: String(r.id),
     kind: 'feed',
     timestamp: String(r.timestamp),
-    type: r.type === 'formula' ? 'formula' : 'breast',
-    volume: Number(r.volume) || 0,
+    // legacy rows stored type + volume; new rows store split volumes
+    breastVolume: r.type === 'breast' ? Number(r.volume) || 0 : Number(r.breast_volume) || 0,
+    formulaVolume: r.type === 'formula' ? Number(r.volume) || 0 : Number(r.formula_volume) || 0,
     duration: Number(r.duration) || 0,
     side: (r.side as FeedLog['side']) || null,
     notes: String(r.notes ?? ''),
@@ -107,6 +108,8 @@ export default function App() {
     kind: 'excrete',
     timestamp: String(r.timestamp),
     type: r.type === 'poop' || r.type === 'both' ? (r.type as ExcreteLog['type']) : 'wet',
+    peeSize: String(r.pee_size ?? ''),
+    pooSize: String(r.poo_size ?? ''),
     color: String(r.color ?? ''),
     consistency: String(r.consistency ?? ''),
     notes: String(r.notes ?? ''),
@@ -168,7 +171,6 @@ export default function App() {
     setFeeds(mf)
     setExcretes(me)
     setWeights(mw)
-    saveAll(baby, mf, me, mw)
     setSyncError(null)
   }, [])
 
@@ -178,74 +180,68 @@ export default function App() {
     refreshFromServer().catch(() => setSyncError('⚠️ 無法讀取雲端資料 — 顯示本機資料'))
   }, [token, refreshFromServer])
 
-  const persist = useCallback(
-    (b: BabyProfile, f: FeedLog[], e: ExcreteLog[], w: WeightLog[]) => {
-      saveAll(b, f, e, w)
-      setBaby(b)
-      setFeeds(f)
-      setExcretes(e)
-      setWeights(w)
-    },
-    [],
-  )
+  // Persist state to localStorage whenever it changes (after initial load).
+  useEffect(() => {
+    if (loaded) saveAll(baby, feeds, excretes, weights)
+  }, [baby, feeds, excretes, weights, loaded])
 
   // Optimistic local write + push to server. Failure keeps local change and shows a banner.
+  // Mutations use functional setState so multiple calls in one tick compose instead of
+  // clobbering each other (e.g. combined feed+excrete form).
   const push = useCallback((fn: () => Promise<unknown>) => {
     fn().then(() => setSyncError(null)).catch(() => setSyncError('⚠️ 同步失敗 — 改動僅存本機，下次成功同步後合併'))
   }, [])
 
   const addFeed = useCallback(
     (log: FeedLog) => {
-      const f = [log, ...feeds]
-      persist(baby, f, excretes, weights)
+      setFeeds((prev) => [log, ...prev])
       push(() => api.addFeed(log))
     },
-    [baby, feeds, excretes, weights, persist, push],
+    [push],
   )
 
   const addExcrete = useCallback(
     (log: ExcreteLog) => {
-      const e = [log, ...excretes]
-      persist(baby, feeds, e, weights)
+      setExcretes((prev) => [log, ...prev])
       push(() => api.addExcrete(log))
     },
-    [baby, feeds, excretes, weights, persist, push],
+    [push],
   )
 
   const addWeight = useCallback(
     (log: WeightLog) => {
-      const w = [log, ...weights]
-      persist(baby, feeds, excretes, w)
+      setWeights((prev) => [log, ...prev])
       push(() => api.addWeight(log))
     },
-    [baby, feeds, excretes, weights, persist, push],
+    [push],
   )
 
   const saveBaby = useCallback(
     (b: BabyProfile) => {
-      persist(b, feeds, excretes, weights)
+      setBaby(b)
       push(() => api.saveBaby(b))
     },
-    [feeds, excretes, weights, persist, push],
+    [push],
   )
 
   const deleteLog = useCallback(
     (id: string, kind: 'feed' | 'excrete' | 'weight') => {
-      const f = kind === 'feed' ? feeds.filter((x) => x.id !== id) : feeds
-      const e = kind === 'excrete' ? excretes.filter((x) => x.id !== id) : excretes
-      const w = kind === 'weight' ? weights.filter((x) => x.id !== id) : weights
-      persist(baby, f, e, w)
+      if (kind === 'feed') setFeeds((prev) => prev.filter((x) => x.id !== id))
+      else if (kind === 'excrete') setExcretes((prev) => prev.filter((x) => x.id !== id))
+      else setWeights((prev) => prev.filter((x) => x.id !== id))
       push(() => api.deleteLog(id, kind))
     },
-    [baby, feeds, excretes, weights, persist, push],
+    [push],
   )
 
   const resetAll = useCallback(() => {
     if (!window.confirm('清除所有記錄？此操作無法復原。')) return
-    const b = { ...DEFAULT_BABY, dob: baby.dob }
-    persist(b, [], [], [])
+    setBaby({ ...DEFAULT_BABY, dob: baby.dob })
+    setFeeds([])
+    setExcretes([])
+    setWeights([])
     push(() => api.deleteAll())
-  }, [baby.dob, persist, push])
+  }, [baby.dob, push])
 
   const allLogs = useMemo(() => combineLogs(feeds, excretes, weights), [feeds, excretes, weights])
 
@@ -263,8 +259,7 @@ export default function App() {
           )}
           <main className="safe-pb flex-1 px-4 pt-3">
             {tab === 'home' && <Home baby={baby} feeds={feeds} excretes={excretes} weights={weights} allLogs={allLogs} deleteLog={deleteLog} setTab={setTab} addWeight={addWeight} />}
-            {tab === 'feed' && <FeedForm baby={baby} addFeed={addFeed} setTab={setTab} />}
-            {tab === 'excrete' && <ExcreteForm addExcrete={addExcrete} setTab={setTab} />}
+            {tab === 'record' && <CombinedForm baby={baby} addFeed={addFeed} addExcrete={addExcrete} setTab={setTab} />}
             {tab === 'history' && <History allLogs={allLogs} deleteLog={deleteLog} unit={baby.unit} />}
             {tab === 'charts' && <Charts feeds={feeds} excretes={excretes} weights={weights} unit={baby.unit} />}
           </main>
@@ -324,14 +319,13 @@ function Header({
   const [showReport, setShowReport] = useState(false)
   const titles: Record<TabId, string> = {
     home: '首頁',
-    feed: '餵奶',
-    excrete: '排泄',
+    record: '記錄',
     history: '歷史',
     charts: '圖表',
   }
   const tf = todayFeeds(feeds)
   const te = todayExcretes(excretes)
-  const feedVol = tf.reduce((s, f) => s + (f.volume || 0), 0)
+  const feedVol = tf.reduce((s, f) => s + (f.breastVolume || 0) + (f.formulaVolume || 0), 0)
   const hour = new Date().getHours()
   const greet = hour < 6 ? '夜深了' : hour < 12 ? '早晨' : hour < 18 ? '午安' : '晚安'
   const greetIcon = hour < 6 || hour >= 18 ? '🌙' : '☀️'
@@ -401,15 +395,14 @@ function Header({
 function BottomNav({ tab, setTab }: { tab: TabId; setTab: (t: TabId) => void }) {
   const items: { id: TabId; icon: ReactNode; label: string }[] = [
     { id: 'home', icon: <HomeIcon size={24} />, label: '首頁' },
-    { id: 'feed', icon: <Milk size={24} />, label: '餵奶' },
-    { id: 'excrete', icon: <Droplets size={24} />, label: '排泄' },
+    { id: 'record', icon: <SquarePen size={24} />, label: '記錄' },
     { id: 'history', icon: <HistoryIcon size={24} />, label: '歷史' },
     { id: 'charts', icon: <BarChart3 size={24} />, label: '圖表' },
   ]
 
   return (
     <nav className="safe-bottom-nav fixed bottom-0 left-0 right-0 z-40 mx-auto max-w-[480px] border-t border-[var(--border)] bg-[var(--surface)]/95 px-1 backdrop-blur-xl">
-      <div className="grid h-16 grid-cols-5">
+      <div className="grid h-16 grid-cols-4">
         {items.map((it) => {
           const active = it.id === tab
           return (
@@ -454,7 +447,7 @@ function Home({
   const [showWeight, setShowWeight] = useState(false)
   const tf = todayFeeds(feeds)
   const te = todayExcretes(excretes)
-  const vol = tf.reduce((s, f) => s + (f.volume || 0), 0)
+  const vol = tf.reduce((s, f) => s + (f.breastVolume || 0) + (f.formulaVolume || 0), 0)
   const wet = te.filter((e) => e.type === 'wet' || e.type === 'both').length
   const poop = te.filter((e) => e.type === 'poop' || e.type === 'both').length
 
@@ -466,29 +459,17 @@ function Home({
 
   return (
     <div className="space-y-4 rise">
-      {/* Quick actions */}
-      <div className="grid grid-cols-2 gap-3">
-        <button
-          onClick={() => setTab('feed')}
-          className="card flex items-center gap-3 rounded-2xl p-4 text-left transition-transform active:scale-[0.98]"
-        >
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--teal-dim)] text-[var(--teal)]"><Milk size={20} /></div>
-          <div>
-            <div className="text-sm font-semibold">記錄餵奶</div>
-            <div className="text-xs text-[var(--muted)]">份量時長邊別</div>
-          </div>
-        </button>
-        <button
-          onClick={() => setTab('excrete')}
-          className="card flex items-center gap-3 rounded-2xl p-4 text-left transition-transform active:scale-[0.98]"
-        >
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--pink-dim)] text-[var(--pink)]"><Droplets size={20} /></div>
-          <div>
-            <div className="text-sm font-semibold">記錄排泄</div>
-            <div className="text-xs text-[var(--muted)]">尿布大便詳情</div>
-          </div>
-        </button>
-      </div>
+      {/* Quick action */}
+      <button
+        onClick={() => setTab('record')}
+        className="card flex w-full items-center gap-3 rounded-2xl p-4 text-left transition-transform active:scale-[0.98]"
+      >
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[var(--teal-dim)] to-[var(--pink-dim)] text-[var(--teal)]"><SquarePen size={20} /></div>
+        <div>
+          <div className="text-sm font-semibold">記錄餵奶 / 排泄</div>
+          <div className="text-xs text-[var(--muted)]">同一頁搞掂，可以一齊記</div>
+        </div>
+      </button>
 
       {/* Today stats */}
       <div className="grid grid-cols-2 gap-3">
@@ -508,7 +489,7 @@ function Home({
             <span className="text-sm text-[var(--muted)]">次</span>
           </div>
           <div className="mt-0.5 flex gap-3 text-xs">
-            <span>濕 <strong className="font-semibold text-[var(--blue)]">{wet}</strong></span>
+            <span>尿 <strong className="font-semibold text-[var(--blue)]">{wet}</strong></span>
             <span>便 <strong className="font-semibold text-[var(--amber)]">{poop}</strong></span>
           </div>
           {lastE && <div className="mt-1 text-xs text-[var(--muted)]">上次 · {fmtAgo(lastE.timestamp)}</div>}
@@ -587,8 +568,9 @@ function LogCard({ log, unit, bare = false, onDelete }: { log: LogEntry; unit: U
             <span className="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-[var(--teal-dim)] text-[var(--teal)]"><Milk size={14} /></span>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2 text-sm">
-                <span className="font-semibold">{feedTypeLabel(log.type)}</span>
-                {log.volume > 0 && <Badge color="var(--teal)" label={`${toDisplayVolume(log.volume, unit)} ${unitLabel(unit)}`} />}
+                <span className="font-semibold">餵奶</span>
+                {log.breastVolume > 0 && <Badge color="var(--teal)" label={`母乳 ${toDisplayVolume(log.breastVolume, unit)}${unitLabel(unit)}`} />}
+                {log.formulaVolume > 0 && <Badge color="var(--blue)" label={`配方 ${toDisplayVolume(log.formulaVolume, unit)}${unitLabel(unit)}`} />}
               </div>
               <div className="text-xs text-[var(--muted)]">
                 {fmtDateTime(log.timestamp)}
@@ -665,7 +647,7 @@ function LogCard({ log, unit, bare = false, onDelete }: { log: LogEntry; unit: U
               <span className="font-semibold">{excreteLabel(log.type)}</span>
               {log.color && <Badge color="var(--amber)" label={log.color} />}
             </div>
-            <div className="text-xs text-[var(--muted)]">{fmtDateTime(log.timestamp)}{log.consistency ? ` · ${log.consistency}` : ''}</div>
+            <div className="text-xs text-[var(--muted)]">{fmtDateTime(log.timestamp)}{log.peeSize ? ` · 尿量${log.peeSize}` : ''}{log.pooSize ? ` · 便量${log.pooSize}` : ''}{log.consistency ? ` · ${log.consistency}` : ''}</div>
             {log.notes && <div className="mt-1 text-xs italic text-[var(--muted)]">{log.notes}</div>}
           </div>
         </div>
@@ -702,29 +684,67 @@ function Badge({ color, label }: { color: string; label: string }) {
 }
 
 // ──────────────────────────────────────────────
-// FEED FORM
+// RECORD FORM (feed + excrete combined)
 // ──────────────────────────────────────────────
-function FeedForm({ baby, addFeed, setTab }: { baby: BabyProfile; addFeed: (f: FeedLog) => void; setTab: (t: TabId) => void }) {
-  const [type, setType] = useState<FeedType>('breast')
-  const [volume, setVolume] = useState('')
+function CombinedForm({ baby, addFeed, addExcrete, setTab }: {
+  baby: BabyProfile
+  addFeed: (f: FeedLog) => void
+  addExcrete: (e: ExcreteLog) => void
+  setTab: (t: TabId) => void
+}) {
+  // feed
+  const [breast, setBreast] = useState('')
+  const [formula, setFormula] = useState('')
   const [duration, setDuration] = useState('')
   const [side, setSide] = useState<FeedLog['side']>('both')
+  // excrete
+  const [exType, setExType] = useState<'none' | ExcreteLog['type']>('none')
+  const [peeSize, setPeeSize] = useState('')
+  const [pooSize, setPooSize] = useState('')
+  const [color, setColor] = useState('')
+  const [texture, setTexture] = useState('')
+  // shared
   const [notes, setNotes] = useState('')
   const [date, setDate] = useState(todayLocal())
   const [time, setTime] = useState(nowLocalTime())
 
+  const bv = Number(breast) || 0
+  const fv = Number(formula) || 0
+  const dur = Number(duration) || 0
+  const hasFeed = bv > 0 || fv > 0 || dur > 0
+  const hasExcrete = exType !== 'none'
+  const showPee = exType === 'wet' || exType === 'both'
+  const showPoo = exType === 'poop' || exType === 'both'
+
   const save = () => {
-    addFeed({
-      id: makeId(),
-      kind: 'feed',
-      timestamp: toIsoFromLocal(date, time),
-      type,
-      volume: Number(volume) || 0,
-      duration: Number(duration) || 0,
-      side: type === 'breast' ? (side || 'both') : null,
-      notes: notes.trim(),
-    })
-    setVolume(''); setDuration(''); setNotes('')
+    const ts = toIsoFromLocal(date, time)
+    if (hasFeed) {
+      addFeed({
+        id: makeId(),
+        kind: 'feed',
+        timestamp: ts,
+        breastVolume: bv,
+        formulaVolume: fv,
+        duration: dur,
+        side: bv > 0 ? side : null,
+        notes: notes.trim(),
+      })
+    }
+    if (hasExcrete) {
+      addExcrete({
+        id: makeId(),
+        kind: 'excrete',
+        timestamp: ts,
+        type: exType,
+        peeSize: showPee ? peeSize : '',
+        pooSize: showPoo ? pooSize : '',
+        color: showPoo ? color : '',
+        consistency: showPoo ? texture : '',
+        notes: notes.trim(),
+      })
+    }
+    setBreast(''); setFormula(''); setDuration(''); setSide('both')
+    setExType('none'); setPeeSize(''); setPooSize(''); setColor(''); setTexture(''); setNotes('')
     setDate(todayLocal()); setTime(nowLocalTime())
     setTab('home')
   }
@@ -732,90 +752,8 @@ function FeedForm({ baby, addFeed, setTab }: { baby: BabyProfile; addFeed: (f: F
   return (
     <div className="space-y-4 rise">
       <div className="card rounded-2xl p-4">
-        <div className="mb-3 flex">
-          <button
-            onClick={() => setType('breast')}
-            className={`chip flex-1 text-center ${type === 'breast' ? 'active' : ''}`}
-          >
-            母乳
-          </button>
-          <div className="w-2" />
-          <button
-            onClick={() => setType('formula')}
-            className={`chip flex-1 text-center ${type === 'formula' ? 'active' : ''}`}
-          >
-            配方奶
-          </button>
-        </div>
-
-        {/* Volume */}
-        <div className="mb-4">
-          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-            份量 ({unitLabel(baby.unit)})
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {VOLUME_CHIPS_ML.map((v) => (
-              <button
-                key={v}
-                onClick={() => setVolume(String(v))}
-                className={`chip text-sm ${String(v) === volume ? 'active' : ''}`}
-              >
-                {toDisplayVolume(v, baby.unit)}
-              </button>
-            ))}
-          </div>
-          <input
-            value={volume}
-            onChange={(e) => setVolume(e.target.value)}
-            placeholder="自訂"
-            inputMode="numeric"
-            className="field mt-2"
-          />
-        </div>
-
-        {/* Duration */}
-        <div className="mb-4">
-          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">時長 (分鐘)</div>
-          <div className="flex flex-wrap gap-2">
-            {DURATION_CHIPS.map((v) => (
-              <button
-                key={v}
-                onClick={() => setDuration(String(v))}
-                className={`chip text-sm ${String(v) === duration ? 'active' : ''}`}
-              >
-                {v} min
-              </button>
-            ))}
-          </div>
-          <input
-            value={duration}
-            onChange={(e) => setDuration(e.target.value)}
-            placeholder="自訂"
-            inputMode="numeric"
-            className="field mt-2"
-          />
-        </div>
-
-        {/* Side (breast only) */}
-        {type === 'breast' && (
-          <div className="mb-4">
-            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">邊別</div>
-            <div className="flex gap-2">
-              {(['left', 'right', 'both'] as const).map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setSide(s)}
-                  className={`chip flex-1 text-center ${side === s ? 'active' : ''}`}
-                >
-                  {sideLabel(s)}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* Time */}
-        <div className="mb-4">
+        <div className="mb-5">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">時間</span>
             <button onClick={() => { setDate(todayLocal()); setTime(nowLocalTime()) }} className="text-xs font-semibold text-[var(--teal)] active:text-[var(--teal-dim)]">
@@ -828,135 +766,124 @@ function FeedForm({ baby, addFeed, setTab }: { baby: BabyProfile; addFeed: (f: F
           </div>
         </div>
 
+        {/* ── Feed ── */}
+        <div className="mb-5">
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">餵奶</div>
+          <div className="mb-4 grid grid-cols-2 gap-2">
+            <div>
+              <div className="mb-1 text-xs text-[var(--muted)]">母乳 ({unitLabel(baby.unit)})</div>
+              <input value={breast} onChange={(e) => setBreast(e.target.value)} placeholder="0" inputMode="numeric" className="field" />
+            </div>
+            <div>
+              <div className="mb-1 text-xs text-[var(--muted)]">配方奶 ({unitLabel(baby.unit)})</div>
+              <input value={formula} onChange={(e) => setFormula(e.target.value)} placeholder="0" inputMode="numeric" className="field" />
+            </div>
+          </div>
+
+          <div className="mb-4">
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">時長 (分鐘)</div>
+            <div className="flex flex-wrap gap-2">
+              {DURATION_CHIPS.map((v) => (
+                <button key={v} onClick={() => setDuration(String(v))} className={`chip text-sm ${String(v) === duration ? 'active' : ''}`}>
+                  {v} min
+                </button>
+              ))}
+            </div>
+            <input value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="自訂" inputMode="numeric" className="field mt-2" />
+          </div>
+
+          <div>
+            <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">邊別（母乳）</div>
+            <div className="flex gap-2">
+              {(['left', 'right', 'both'] as const).map((s) => (
+                <button key={s} onClick={() => setSide(s)} className={`chip flex-1 text-center ${side === s ? 'active' : ''}`}>
+                  {sideLabel(s)}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* ── Excrete ── */}
+        <div className="mb-5 border-t border-[var(--border)] pt-4">
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">排泄（可略過）</div>
+          <div className="mb-4 flex gap-2">
+            {(['wet', 'poop', 'both'] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setExType(exType === t ? 'none' : t)}
+                className={`chip flex-1 text-center text-sm ${exType === t ? 'pink active' : ''}`}
+              >
+                {t === 'wet' ? '淨尿' : t === 'poop' ? '淨便' : '尿+便'}
+              </button>
+            ))}
+          </div>
+
+          {showPee && (
+            <div className="mb-4">
+              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">尿量</div>
+              <div className="flex gap-2">
+                {(['少', '多'] as const).map((s) => (
+                  <button key={s} onClick={() => setPeeSize(s)} className={`chip flex-1 text-center text-sm ${peeSize === s ? 'pink active' : ''}`}>
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {showPoo && (
+            <>
+              <div className="mb-4">
+                <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">便量</div>
+                <div className="flex gap-2">
+                  {(['少', '多'] as const).map((s) => (
+                    <button key={s} onClick={() => setPooSize(s)} className={`chip flex-1 text-center text-sm ${pooSize === s ? 'pink active' : ''}`}>
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="mb-4 grid grid-cols-2 gap-3">
+                <div>
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">顏色</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {POOP_COLORS.map((c) => (
+                      <button key={c} onClick={() => setColor(c)} className={`chip text-sm ${c === color ? 'pink active' : ''}`}>
+                        {c}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">質地</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {POOP_TEXTURES.map((t) => (
+                      <button key={t} onClick={() => setTexture(t)} className={`chip text-sm ${t === texture ? 'pink active' : ''}`}>
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
         {/* Notes */}
         <div className="mb-5">
           <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">備註</div>
-          <input
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="選填 · 如：很乖，吃得很開心"
-            className="field"
-          />
+          <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="選填" className="field" />
         </div>
 
-        <button onClick={save} className="btn-primary flex items-center justify-center gap-2">
-          ✓ 儲存餵奶記錄
+        <button onClick={save} disabled={!hasFeed && !hasExcrete} className="btn-primary flex items-center justify-center gap-2">
+          ✓ 儲存記錄
         </button>
       </div>
     </div>
   )
 }
 
-// ──────────────────────────────────────────────
-// EXCRETE FORM
-// ──────────────────────────────────────────────
-function ExcreteForm({ addExcrete, setTab }: { addExcrete: (e: ExcreteLog) => void; setTab: (t: TabId) => void }) {
-  const [type, setType] = useState<'wet' | 'poop' | 'both'>('wet')
-  const [color, setColor] = useState('')
-  const [texture, setTexture] = useState('')
-  const [notes, setNotes] = useState('')
-  const [date, setDate] = useState(todayLocal())
-  const [time, setTime] = useState(nowLocalTime())
-
-  const save = () => {
-    addExcrete({
-      id: makeId(),
-      kind: 'excrete',
-      timestamp: toIsoFromLocal(date, time),
-      type,
-      color: type !== 'wet' ? color : '',
-      consistency: type !== 'wet' ? texture : '',
-      notes: notes.trim(),
-    })
-    setColor(''); setTexture(''); setNotes('')
-    setDate(todayLocal()); setTime(nowLocalTime())
-    setTab('home')
-  }
-
-  const showPoop = type === 'poop' || type === 'both'
-
-  return (
-    <div className="space-y-4 rise">
-      <div className="card rounded-2xl p-4">
-        <div className="mb-4 flex gap-2">
-          {(['wet', 'poop', 'both'] as const).map((t) => (
-            <button
-              key={t}
-              onClick={() => setType(t)}
-              className={`chip flex-1 text-center text-sm ${
-                t === 'wet' ? 'active' : t === 'poop' ? 'pink active' : ''
-              } ${type === t ? (t === 'wet' ? 'active' : 'pink active') : ''}`}
-              style={t === 'wet' && type === t ? { borderColor: 'var(--blue)', background: 'rgba(96,165,250,.14)', color: 'var(--blue)' } : {}} // handled by CSS class for others
-            >
-              {t === 'wet' ? '濕尿布' : t === 'poop' ? '大便' : '兩者'}
-            </button>
-          ))}
-        </div>
-
-        {showPoop && (
-          <div className="mb-4 grid grid-cols-2 gap-3">
-            <div>
-              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">顏色</div>
-              <div className="flex flex-wrap gap-1.5">
-                {POOP_COLORS.map((c) => (
-                  <button
-                    key={c}
-                    onClick={() => setColor(c)}
-                    className={`chip text-sm ${c === color ? 'pink active' : ''}`}
-                  >
-                    {c}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div>
-              <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">質地</div>
-              <div className="flex flex-wrap gap-1.5">
-                {POOP_TEXTURES.map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => setTexture(t)}
-                    className={`chip text-sm ${t === texture ? 'pink active' : ''}`}
-                  >
-                    {t}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Time */}
-        <div className="mb-4">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">時間</span>
-            <button onClick={() => { setDate(todayLocal()); setTime(nowLocalTime()) }} className="text-xs font-semibold text-[var(--pink)] active:opacity-70">
-              現在
-            </button>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <input type="date" value={date} max={todayLocal()} onChange={(e) => setDate(e.target.value)} className="field" />
-            <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="field" />
-          </div>
-        </div>
-
-        <div className="mb-5">
-          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">備註</div>
-          <input
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="選填 · 如：大便量多"
-            className="field"
-          />
-        </div>
-
-        <button onClick={save} className="btn-pink flex items-center justify-center gap-2">
-          ✓ 儲存排泄記錄
-        </button>
-      </div>
-    </div>
-  )
-}
 
 // ──────────────────────────────────────────────
 // HISTORY
@@ -1024,7 +951,7 @@ function Charts({ feeds, excretes, weights, unit }: { feeds: FeedLog[]; excretes
   const label = days.map((d) => d.slice(5))
 
   const feedVol = days.map((d) =>
-    toDisplayVolume(feeds.filter((f) => dayKey(f.timestamp) === d).reduce((s, f) => s + (f.volume || 0), 0), unit),
+    toDisplayVolume(feeds.filter((f) => dayKey(f.timestamp) === d).reduce((s, f) => s + (f.breastVolume || 0) + (f.formulaVolume || 0), 0), unit),
   )
   const excByDay = days.map((d) => {
     const ex = excretes.filter((e) => dayKey(e.timestamp) === d)

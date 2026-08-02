@@ -84,7 +84,10 @@ async function ensureBabySchema(env: Env) {
 // Self-healing schema for log tables:
 //  1. create weights if missing (new installs)
 //  2. rebuild any log table still using `created_by` (username) → `user_id` (FK)
-//  3. ensure timestamp indexes (hot path: sort + day bucketing)
+//  3. feeds: split single type+volume → breast/formula volumes
+//  4. excrete sizes are additive ALTERs
+//  5. ensure timestamp indexes (hot path: sort + day bucketing)
+// Migrations run as one atomic D1 batch — a failure rolls back cleanly.
 async function ensureLogsSchema(env: Env) {
   await env.DB.prepare(`CREATE TABLE IF NOT EXISTS weights (
     id TEXT PRIMARY KEY,
@@ -94,65 +97,103 @@ async function ensureLogsSchema(env: Env) {
     user_id INTEGER REFERENCES users(id)
   )`).run()
 
-  const hasUserId = async (t: string) => {
+  const colNames = async (t: string) => {
     const cols = await env.DB.prepare(`PRAGMA table_info(${t})`).all()
-    return cols.results.some((c: any) => c.name === 'user_id')
+    return cols.results.map((c: any) => c.name)
   }
 
-  if (!(await hasUserId('feeds'))) {
-    await env.DB.prepare('ALTER TABLE feeds RENAME TO feeds_old').run()
-    await env.DB.prepare(`CREATE TABLE feeds (
-      id TEXT PRIMARY KEY,
-      timestamp TEXT NOT NULL,
-      type TEXT NOT NULL,
-      volume INTEGER DEFAULT 0,
-      duration INTEGER DEFAULT 0,
-      side TEXT,
-      notes TEXT DEFAULT '',
-      user_id INTEGER REFERENCES users(id)
-    )`).run()
-    await env.DB.prepare(`
-      INSERT INTO feeds (id, timestamp, type, volume, duration, side, notes, user_id)
-      SELECT x.id, x.timestamp, x.type, x.volume, x.duration, x.side, x.notes, COALESCE(u.id, (SELECT MIN(id) FROM users))
-      FROM feeds_old x LEFT JOIN users u ON u.username = x.created_by
-    `).run()
-    await env.DB.prepare('DROP TABLE feeds_old').run()
+  // feeds: original (type/volume/created_by) → user_id → split breast/formula volumes
+  const feedCols = await colNames('feeds')
+  if (!feedCols.includes('breast_volume')) {
+    const hasCreatedBy = feedCols.includes('created_by')
+    const hasLegacy = feedCols.includes('volume')
+    const userIdExpr = hasCreatedBy
+      ? 'COALESCE(u.id, (SELECT MIN(id) FROM users))'
+      : 'COALESCE(x.user_id, (SELECT MIN(id) FROM users))'
+    const joinClause = hasCreatedBy ? 'LEFT JOIN users u ON u.username = x.created_by' : ''
+    const breastExpr = hasLegacy ? "CASE WHEN x.type = 'breast' THEN COALESCE(x.volume, 0) ELSE 0 END" : '0'
+    const formulaExpr = hasLegacy ? "CASE WHEN x.type = 'formula' THEN COALESCE(x.volume, 0) ELSE 0 END" : '0'
+    await env.DB.batch([
+      env.DB.prepare('ALTER TABLE feeds RENAME TO feeds_old'),
+      env.DB.prepare(`CREATE TABLE feeds (
+        id TEXT PRIMARY KEY,
+        timestamp TEXT NOT NULL,
+        breast_volume INTEGER DEFAULT 0,
+        formula_volume INTEGER DEFAULT 0,
+        duration INTEGER DEFAULT 0,
+        side TEXT,
+        notes TEXT DEFAULT '',
+        user_id INTEGER REFERENCES users(id)
+      )`),
+      env.DB.prepare(`
+        INSERT INTO feeds (id, timestamp, breast_volume, formula_volume, duration, side, notes, user_id)
+        SELECT x.id, x.timestamp, ${breastExpr}, ${formulaExpr}, x.duration, x.side, x.notes, ${userIdExpr}
+        FROM feeds_old x ${joinClause}
+      `),
+      env.DB.prepare('DROP TABLE feeds_old'),
+    ])
   }
 
-  if (!(await hasUserId('excretes'))) {
-    await env.DB.prepare('ALTER TABLE excretes RENAME TO excretes_old').run()
-    await env.DB.prepare(`CREATE TABLE excretes (
-      id TEXT PRIMARY KEY,
-      timestamp TEXT NOT NULL,
-      type TEXT NOT NULL,
-      color TEXT DEFAULT '',
-      consistency TEXT DEFAULT '',
-      notes TEXT DEFAULT '',
-      user_id INTEGER REFERENCES users(id)
-    )`).run()
-    await env.DB.prepare(`
-      INSERT INTO excretes (id, timestamp, type, color, consistency, notes, user_id)
-      SELECT x.id, x.timestamp, x.type, x.color, x.consistency, x.notes, COALESCE(u.id, (SELECT MIN(id) FROM users))
-      FROM excretes_old x LEFT JOIN users u ON u.username = x.created_by
-    `).run()
-    await env.DB.prepare('DROP TABLE excretes_old').run()
+  // excretes: created_by → user_id
+  const excCols = await colNames('excretes')
+  if (!excCols.includes('user_id')) {
+    const hasCreatedBy = excCols.includes('created_by')
+    const userIdExpr = hasCreatedBy
+      ? 'COALESCE(u.id, (SELECT MIN(id) FROM users))'
+      : 'COALESCE(x.user_id, (SELECT MIN(id) FROM users))'
+    const joinClause = hasCreatedBy ? 'LEFT JOIN users u ON u.username = x.created_by' : ''
+    await env.DB.batch([
+      env.DB.prepare('ALTER TABLE excretes RENAME TO excretes_old'),
+      env.DB.prepare(`CREATE TABLE excretes (
+        id TEXT PRIMARY KEY,
+        timestamp TEXT NOT NULL,
+        type TEXT NOT NULL,
+        pee_size TEXT DEFAULT '',
+        poo_size TEXT DEFAULT '',
+        color TEXT DEFAULT '',
+        consistency TEXT DEFAULT '',
+        notes TEXT DEFAULT '',
+        user_id INTEGER REFERENCES users(id)
+      )`),
+      env.DB.prepare(`
+        INSERT INTO excretes (id, timestamp, type, color, consistency, notes, user_id)
+        SELECT x.id, x.timestamp, x.type, x.color, x.consistency, x.notes, ${userIdExpr}
+        FROM excretes_old x ${joinClause}
+      `),
+      env.DB.prepare('DROP TABLE excretes_old'),
+    ])
   }
 
-  if (!(await hasUserId('weights'))) {
-    await env.DB.prepare('ALTER TABLE weights RENAME TO weights_old').run()
-    await env.DB.prepare(`CREATE TABLE weights (
-      id TEXT PRIMARY KEY,
-      timestamp TEXT NOT NULL,
-      weight INTEGER NOT NULL,
-      notes TEXT DEFAULT '',
-      user_id INTEGER REFERENCES users(id)
-    )`).run()
-    await env.DB.prepare(`
-      INSERT INTO weights (id, timestamp, weight, notes, user_id)
-      SELECT x.id, x.timestamp, x.weight, x.notes, COALESCE(u.id, (SELECT MIN(id) FROM users))
-      FROM weights_old x LEFT JOIN users u ON u.username = x.created_by
-    `).run()
-    await env.DB.prepare('DROP TABLE weights_old').run()
+  // excrete sizes are additive — plain ALTER, no rebuild
+  for (const col of [['pee_size', "TEXT DEFAULT ''"], ['poo_size', "TEXT DEFAULT ''"]]) {
+    if (!(await colNames('excretes')).includes(col[0])) {
+      await env.DB.prepare(`ALTER TABLE excretes ADD COLUMN ${col[0]} ${col[1]}`).run()
+    }
+  }
+
+  // weights: created_by → user_id
+  if (!(await colNames('weights')).includes('user_id')) {
+    const hasCreatedBy = (await colNames('weights')).includes('created_by')
+    const userIdExpr = hasCreatedBy
+      ? 'COALESCE(u.id, (SELECT MIN(id) FROM users))'
+      : 'COALESCE(x.user_id, (SELECT MIN(id) FROM users))'
+    const joinClause = hasCreatedBy ? 'LEFT JOIN users u ON u.username = x.created_by' : ''
+    await env.DB.batch([
+      env.DB.prepare('ALTER TABLE weights RENAME TO weights_old'),
+      env.DB.prepare(`CREATE TABLE weights (
+        id TEXT PRIMARY KEY,
+        timestamp TEXT NOT NULL,
+        weight INTEGER NOT NULL,
+        notes TEXT DEFAULT '',
+        user_id INTEGER REFERENCES users(id)
+      )`),
+      env.DB.prepare(`
+        INSERT INTO weights (id, timestamp, weight, notes, user_id)
+        SELECT x.id, x.timestamp, x.weight, x.notes, ${userIdExpr}
+        FROM weights_old x ${joinClause}
+      `),
+      env.DB.prepare('DROP TABLE weights_old'),
+    ])
   }
 
   await env.DB.prepare('CREATE INDEX IF NOT EXISTS idx_feeds_timestamp ON feeds(timestamp)').run()
@@ -224,9 +265,9 @@ export default {
       const id = log.id || crypto.randomUUID()
       const userId = await resolveUserId(env, username, uid)
       await env.DB.prepare(`
-        INSERT INTO feeds (id, timestamp, type, volume, duration, side, notes, user_id)
+        INSERT INTO feeds (id, timestamp, breast_volume, formula_volume, duration, side, notes, user_id)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).bind(id, log.timestamp, log.type, log.volume || 0, log.duration || 0, log.side || null, log.notes || '', userId).run()
+      `).bind(id, log.timestamp, log.breastVolume || 0, log.formulaVolume || 0, log.duration || 0, log.side || null, log.notes || '', userId).run()
       return json({ success: true, id })
     }
 
@@ -236,9 +277,9 @@ export default {
       const id = log.id || crypto.randomUUID()
       const userId = await resolveUserId(env, username, uid)
       await env.DB.prepare(`
-        INSERT INTO excretes (id, timestamp, type, color, consistency, notes, user_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).bind(id, log.timestamp, log.type, log.color || '', log.consistency || '', log.notes || '', userId).run()
+        INSERT INTO excretes (id, timestamp, type, pee_size, poo_size, color, consistency, notes, user_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(id, log.timestamp, log.type, log.peeSize || '', log.pooSize || '', log.color || '', log.consistency || '', log.notes || '', userId).run()
       return json({ success: true, id })
     }
 
