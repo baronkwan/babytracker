@@ -9,7 +9,7 @@ export interface Env {
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',
+  'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type,Authorization',
 }
 
@@ -291,6 +291,22 @@ export default {
       await env.DB.prepare('INSERT INTO weights (id, timestamp, weight, notes, user_id) VALUES (?, ?, ?, ?, ?)')
         .bind(id, log.timestamp, log.weight || 0, log.notes || '', userId).run()
       return json({ success: true, id })
+    }
+
+    // Update log (feed, excrete or weight) — same id kept, fields replaced
+    if (path === '/api/logs' && req.method === 'PUT') {
+      const { id, kind, timestamp, notes, breastVolume, formulaVolume, duration, side, type, peeSize, pooSize, color, consistency, weight } = await req.json()
+      if (kind === 'feed') {
+        await env.DB.prepare('UPDATE feeds SET timestamp = ?, breast_volume = ?, formula_volume = ?, duration = ?, side = ?, notes = ? WHERE id = ?')
+          .bind(timestamp, breastVolume || 0, formulaVolume || 0, duration || 0, side || null, notes || '', id).run()
+      } else if (kind === 'weight') {
+        await env.DB.prepare('UPDATE weights SET timestamp = ?, weight = ?, notes = ? WHERE id = ?')
+          .bind(timestamp, weight || 0, notes || '', id).run()
+      } else {
+        await env.DB.prepare('UPDATE excretes SET timestamp = ?, type = ?, pee_size = ?, poo_size = ?, color = ?, consistency = ?, notes = ? WHERE id = ?')
+          .bind(timestamp, type, peeSize || '', pooSize || '', color || '', consistency || '', notes || '', id).run()
+      }
+      return json({ success: true })
     }
 
     // Delete log (feed, excrete or weight)

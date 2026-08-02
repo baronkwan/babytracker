@@ -73,6 +73,8 @@ export const api = {
   addWeight: (log: WeightLog) => request('/api/weights', { method: 'POST', body: JSON.stringify(log) }),
   deleteLog: (id: string, kind: 'feed' | 'excrete' | 'weight') =>
     request('/api/logs', { method: 'DELETE', body: JSON.stringify({ id, kind }) }),
+  updateLog: (id: string, kind: 'feed' | 'excrete' | 'weight', fields: object) =>
+    request('/api/logs', { method: 'PUT', body: JSON.stringify({ id, kind, ...fields }) }),
   deleteAll: () => request('/api/logs/all', { method: 'DELETE' }),
   saveBaby: (baby: BabyProfile) => request('/api/baby', { method: 'POST', body: JSON.stringify(baby) }),
 }

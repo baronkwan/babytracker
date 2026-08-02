@@ -15,6 +15,7 @@ import {
   offsetDateKey,
   parseSpeechText,
   sideLabel,
+  timeOfDay,
   todayExcretes,
   todayFeeds,
   todayKey,
@@ -93,6 +94,7 @@ export default function App() {
   const [excretes, setExcretes] = useState<ExcreteLog[]>([])
   const [weights, setWeights] = useState<WeightLog[]>([])
   const [tab, setTab] = useState<TabId>('home')
+  const [editLog, setEditLog] = useState<LogEntry | null>(null)
   const [loaded, setLoaded] = useState(false)
   const [showAdmin, setShowAdmin] = useState(false)
   const [syncError, setSyncError] = useState<string | null>(null)
@@ -183,9 +185,16 @@ export default function App() {
     for (const w of localWeights) {
       if (!serverWeightIds.has(w.id) && !deletedSet.has(w.id)) api.addWeight(w).catch(() => setSyncError('⚠️ 部分本機記錄未能上傳，將於下次同步重試'))
     }
-    const mf = mergeById(localFeeds.filter((f) => !deletedSet.has(f.id)), sf)
-    const me = mergeById(localExcretes.filter((e) => !deletedSet.has(e.id)), se)
-    const mw = mergeById(localWeights.filter((w) => !deletedSet.has(w.id)), sw)
+    const mf = mergeById(localFeeds.filter((f) => !deletedSet.has(f.id)), sf.filter((f) => !deletedSet.has(f.id)))
+    const me = mergeById(localExcretes.filter((e) => !deletedSet.has(e.id)), se.filter((e) => !deletedSet.has(e.id)))
+    const mw = mergeById(localWeights.filter((w) => !deletedSet.has(w.id)), sw.filter((w) => !deletedSet.has(w.id)))
+    // Tombstoned rows that still exist on the server (an earlier delete that
+    // failed or ran on another device) get re-deleted so they never resurface.
+    for (const id of deletedSet) {
+      if (serverFeedIds.has(id)) api.deleteLog(id, 'feed').catch(() => {})
+      if (serverExcreteIds.has(id)) api.deleteLog(id, 'excrete').catch(() => {})
+      if (serverWeightIds.has(id)) api.deleteLog(id, 'weight').catch(() => {})
+    }
     setBaby(baby)
     setFeeds(mf)
     setExcretes(me)
@@ -223,6 +232,22 @@ export default function App() {
     (log: ExcreteLog) => {
       setExcretes((prev) => [log, ...prev])
       push(() => api.addExcrete(log))
+    },
+    [push],
+  )
+
+  const updateFeed = useCallback(
+    (log: FeedLog) => {
+      setFeeds((prev) => prev.map((f) => (f.id === log.id ? log : f)))
+      push(() => api.updateLog(log.id, 'feed', log))
+    },
+    [push],
+  )
+
+  const updateExcrete = useCallback(
+    (log: ExcreteLog) => {
+      setExcretes((prev) => prev.map((e) => (e.id === log.id ? log : e)))
+      push(() => api.updateLog(log.id, 'excrete', log))
     },
     [push],
   )
@@ -281,8 +306,8 @@ export default function App() {
           )}
           <main className="safe-pb flex-1 px-4 pt-3">
             {tab === 'home' && <Home baby={baby} feeds={feeds} excretes={excretes} weights={weights} allLogs={allLogs} deleteLog={deleteLog} setTab={setTab} addWeight={addWeight} />}
-            {tab === 'record' && <CombinedForm baby={baby} feeds={feeds} excretes={excretes} addFeed={addFeed} addExcrete={addExcrete} setTab={setTab} />}
-            {tab === 'history' && <History allLogs={allLogs} deleteLog={deleteLog} unit={baby.unit} />}
+            {tab === 'record' && <CombinedForm baby={baby} feeds={feeds} excretes={excretes} editLog={editLog} onEditDone={() => setEditLog(null)} addFeed={addFeed} addExcrete={addExcrete} updateFeed={updateFeed} updateExcrete={updateExcrete} setTab={setTab} />}
+            {tab === 'history' && <History allLogs={allLogs} deleteLog={deleteLog} onEdit={(log) => { setEditLog(log); setTab('record') }} unit={baby.unit} />}
             {tab === 'charts' && <Charts feeds={feeds} excretes={excretes} weights={weights} unit={baby.unit} />}
           </main>
           <BottomNav tab={tab} setTab={setTab} />
@@ -579,7 +604,7 @@ function Home({
 // ──────────────────────────────────────────────
 // LOG CARD (shared)
 // ──────────────────────────────────────────────
-function LogCard({ log, unit, bare = false, onDelete }: { log: LogEntry; unit: Unit; bare?: boolean; onDelete: () => void }) {
+function LogCard({ log, unit, bare = false, onDelete, onEdit }: { log: LogEntry; unit: Unit; bare?: boolean; onDelete: () => void; onEdit?: () => void }) {
   const [confirm, setConfirm] = useState(false)
 
   if (log.kind === 'feed') {
@@ -602,22 +627,33 @@ function LogCard({ log, unit, bare = false, onDelete }: { log: LogEntry; unit: U
               {log.notes && <div className="mt-1 text-xs italic text-[var(--muted)]">{log.notes}</div>}
             </div>
           </div>
-          {confirm ? (
-            <button
-              onClick={(e) => { e.stopPropagation(); onDelete() }}
-              className="flex-shrink-0 rounded-lg bg-[var(--red)]/10 px-2 py-1 text-xs font-semibold text-[var(--red)] active:bg-[var(--red)]/20"
-            >
-              確認?
-            </button>
-          ) : (
-            <button
-              onClick={(e) => { e.stopPropagation(); setConfirm(true); setTimeout(() => setConfirm(false), 3000) }}
-              className="flex-shrink-0 text-[var(--muted)] active:text-[var(--red)]"
-              aria-label="刪除"
-            >
-              <X size={16} />
-            </button>
-          )}
+          <div className="flex flex-shrink-0 items-center gap-1.5">
+            {onEdit && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onEdit() }}
+                className="text-[var(--muted)] active:text-[var(--teal)]"
+                aria-label="編輯"
+              >
+                <SquarePen size={15} />
+              </button>
+            )}
+            {confirm ? (
+              <button
+                onClick={(e) => { e.stopPropagation(); onDelete() }}
+                className="rounded-lg bg-[var(--red)]/10 px-2 py-1 text-xs font-semibold text-[var(--red)] active:bg-[var(--red)]/20"
+              >
+                確認?
+              </button>
+            ) : (
+              <button
+                onClick={(e) => { e.stopPropagation(); setConfirm(true); setTimeout(() => setConfirm(false), 3000) }}
+                className="text-[var(--muted)] active:text-[var(--red)]"
+                aria-label="刪除"
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
         </div>
       </div>
     )
@@ -673,22 +709,33 @@ function LogCard({ log, unit, bare = false, onDelete }: { log: LogEntry; unit: U
             {log.notes && <div className="mt-1 text-xs italic text-[var(--muted)]">{log.notes}</div>}
           </div>
         </div>
-        {confirm ? (
-          <button
-            onClick={(e) => { e.stopPropagation(); onDelete() }}
-            className="flex-shrink-0 rounded-lg bg-[var(--red)]/10 px-2 py-1 text-xs font-semibold text-[var(--red)] active:bg-[var(--red)]/20"
-          >
-            確認?
-          </button>
-        ) : (
-          <button
-            onClick={(e) => { e.stopPropagation(); setConfirm(true); setTimeout(() => setConfirm(false), 3000) }}
-            className="flex-shrink-0 text-[var(--muted)] active:text-[var(--red)]"
-            aria-label="刪除"
-          >
-            <X size={16} />
-          </button>
-        )}
+        <div className="flex flex-shrink-0 items-center gap-1.5">
+          {onEdit && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onEdit() }}
+              className="text-[var(--muted)] active:text-[var(--pink)]"
+              aria-label="編輯"
+            >
+              <SquarePen size={15} />
+            </button>
+          )}
+          {confirm ? (
+            <button
+              onClick={(e) => { e.stopPropagation(); onDelete() }}
+              className="rounded-lg bg-[var(--red)]/10 px-2 py-1 text-xs font-semibold text-[var(--red)] active:bg-[var(--red)]/20"
+            >
+              確認?
+            </button>
+          ) : (
+            <button
+              onClick={(e) => { e.stopPropagation(); setConfirm(true); setTimeout(() => setConfirm(false), 3000) }}
+              className="text-[var(--muted)] active:text-[var(--red)]"
+              aria-label="刪除"
+            >
+              <X size={16} />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -708,12 +755,16 @@ function Badge({ color, label }: { color: string; label: string }) {
 // ──────────────────────────────────────────────
 // RECORD FORM (feed + excrete combined)
 // ──────────────────────────────────────────────
-function CombinedForm({ baby, feeds, excretes, addFeed, addExcrete, setTab }: {
+function CombinedForm({ baby, feeds, excretes, editLog, onEditDone, addFeed, addExcrete, updateFeed, updateExcrete, setTab }: {
   baby: BabyProfile
   feeds: FeedLog[]
   excretes: ExcreteLog[]
+  editLog: LogEntry | null
+  onEditDone: () => void
   addFeed: (f: FeedLog) => void
   addExcrete: (e: ExcreteLog) => void
+  updateFeed: (f: FeedLog) => void
+  updateExcrete: (e: ExcreteLog) => void
   setTab: (t: TabId) => void
 }) {
   // feed
@@ -737,6 +788,26 @@ function CombinedForm({ baby, feeds, excretes, addFeed, addExcrete, setTab }: {
   const [parseMsg, setParseMsg] = useState('')
   const [saveMsg, setSaveMsg] = useState('')
   const supportsSR = typeof window !== 'undefined' && !!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)
+
+  // Edit mode: pre-fill the form from the record being edited.
+  useEffect(() => {
+    if (!editLog) return
+    setDate(dayKey(editLog.timestamp))
+    setTime(timeOfDay(editLog.timestamp))
+    setNotes(editLog.notes || '')
+    if (editLog.kind === 'feed') {
+      setBreast(String(editLog.breastVolume || ''))
+      setFormula(String(editLog.formulaVolume || ''))
+      setDuration(String(editLog.duration || ''))
+      setSide(editLog.side || 'both')
+    } else if (editLog.kind === 'excrete') {
+      setExType(editLog.type)
+      setPeeSize(editLog.peeSize || '')
+      setPooSize(editLog.pooSize || '')
+      setColor(editLog.color || '')
+      setTexture(editLog.consistency || '')
+    }
+  }, [editLog])
   const startListening = () => {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
     const rec = new SR()
@@ -792,6 +863,23 @@ function CombinedForm({ baby, feeds, excretes, addFeed, addExcrete, setTab }: {
 
   const save = () => {
     const ts = toIsoFromLocal(date, time)
+    // Edit mode: update the record in place (same id), no duplicate guard —
+    // the user is intentionally changing an existing record.
+    if (editLog) {
+      setSaveMsg('')
+      if (editLog.kind === 'feed' && hasFeed) {
+        updateFeed({ id: editLog.id, kind: 'feed', timestamp: ts, breastVolume: bv, formulaVolume: fv, duration: dur, side: bv > 0 ? side : null, notes: notes.trim() })
+      }
+      if (editLog.kind === 'excrete' && hasExcrete) {
+        updateExcrete({ id: editLog.id, kind: 'excrete', timestamp: ts, type: exType, peeSize: showPee ? peeSize : '', pooSize: showPoo ? pooSize : '', color: showPoo ? color : '', consistency: showPoo ? texture : '', notes: notes.trim() })
+      }
+      onEditDone()
+      setBreast(''); setFormula(''); setDuration(''); setSide('both')
+      setExType('none'); setPeeSize(''); setPooSize(''); setColor(''); setTexture(''); setNotes('')
+      setDate(todayLocal()); setTime(nowLocalTime())
+      setTab('home')
+      return
+    }
     // Duplicate guard: the form's timestamps are minute-granular, so a fast
     // re-record (e.g. two voice saves within the same minute) would otherwise
     // create look-alike entries with identical timestamps and values.
@@ -840,6 +928,13 @@ function CombinedForm({ baby, feeds, excretes, addFeed, addExcrete, setTab }: {
 
   return (
     <div className="space-y-4 rise pb-2">
+      {/* Edit mode banner */}
+      {editLog && (
+        <div className="card rounded-2xl border-[var(--teal)]/50 bg-[var(--teal-dim)]/40 p-3 text-xs font-medium text-[var(--teal)]">
+          ✏️ 編輯中：{editLog.kind === 'feed' ? '餵奶' : '排泄'} · {fmtDateTime(editLog.timestamp)} — 改完撳「更新記錄」
+        </div>
+      )}
+
       {/* Quick speech/text input */}
       <div className="card rounded-2xl p-4">
         <div className="mb-2 flex items-center justify-between">
@@ -1035,8 +1130,13 @@ function CombinedForm({ baby, feeds, excretes, addFeed, addExcrete, setTab }: {
       <div className="sticky bottom-0 -mx-4 mt-5 border-t border-[var(--border)] bg-[var(--bg)]/90 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 backdrop-blur-md">
         {saveMsg && <div className="mb-2 text-center text-xs font-medium text-red-400">{saveMsg}</div>}
         <button onClick={save} disabled={!hasFeed && !hasExcrete} className="btn-primary flex w-full items-center justify-center gap-2 py-3.5 text-base">
-          ✓ 儲存記錄
+          {editLog ? '✓ 更新記錄' : '✓ 儲存記錄'}
         </button>
+        {editLog && (
+          <button onClick={() => { onEditDone(); setBreast(''); setFormula(''); setDuration(''); setSide('both'); setExType('none'); setPeeSize(''); setPooSize(''); setColor(''); setTexture(''); setNotes(''); setDate(todayLocal()); setTime(nowLocalTime()); setTab('home') }} className="mt-2 w-full text-center text-xs font-semibold text-[var(--muted)] active:opacity-60">
+            取消編輯
+          </button>
+        )}
       </div>
     </div>
   )
@@ -1046,7 +1146,7 @@ function CombinedForm({ baby, feeds, excretes, addFeed, addExcrete, setTab }: {
 // ──────────────────────────────────────────────
 // HISTORY
 // ──────────────────────────────────────────────
-function History({ allLogs, deleteLog, unit }: { allLogs: LogEntry[]; deleteLog: (id: string, kind: 'feed' | 'excrete' | 'weight') => void; unit: Unit }) {
+function History({ allLogs, deleteLog, onEdit, unit }: { allLogs: LogEntry[]; deleteLog: (id: string, kind: 'feed' | 'excrete' | 'weight') => void; onEdit: (log: LogEntry) => void; unit: Unit }) {
   const [filter, setFilter] = useState<'all' | 'feed' | 'excrete' | 'weight'>('all')
   const [search, setSearch] = useState('')
   // date filter: '' = 全部, 'today' | 'yesterday' | '7d' presets, or a concrete 'YYYY-MM-DD'
@@ -1125,7 +1225,7 @@ function History({ allLogs, deleteLog, unit }: { allLogs: LogEntry[]; deleteLog:
           <div className="p-6 text-center text-sm text-[var(--muted)]">沒有符合的記錄</div>
         )}
         {filtered.map((log) => (
-          <LogCard key={log.id} log={log} unit={unit} bare onDelete={() => deleteLog(log.id, log.kind)} />
+          <LogCard key={log.id} log={log} unit={unit} bare onDelete={() => deleteLog(log.id, log.kind)} onEdit={log.kind !== 'weight' ? () => onEdit(log) : undefined} />
         ))}
       </div>
     </div>

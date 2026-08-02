@@ -7,6 +7,10 @@ export function dayKey(iso: string) {
   return format(parseISO(iso), 'yyyy-MM-dd')
 }
 
+export function timeOfDay(iso: string) {
+  return format(parseISO(iso), 'HH:mm')
+}
+
 export function hourKey(iso: string) {
   return format(parseISO(iso), 'HH')
 }
