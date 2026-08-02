@@ -1083,9 +1083,13 @@ function Charts({ feeds, excretes, weights, unit }: { feeds: FeedLog[]; excretes
     hourly ? dayKey(ts) === todayKey() && hourKey(ts) === b : dayKey(ts) === b
   const periodLabel = hourly ? '今日' : `近${cfg.days}天`
 
-  const feedVol = buckets.map((b) =>
-    toDisplayVolume(feeds.filter((f) => inBucket(f.timestamp, b)).reduce((s, f) => s + (f.breastVolume || 0) + (f.formulaVolume || 0), 0), unit),
+  const breastVol = buckets.map((b) =>
+    toDisplayVolume(feeds.filter((f) => inBucket(f.timestamp, b)).reduce((s, f) => s + (f.breastVolume || 0), 0), unit),
   )
+  const formulaVol = buckets.map((b) =>
+    toDisplayVolume(feeds.filter((f) => inBucket(f.timestamp, b)).reduce((s, f) => s + (f.formulaVolume || 0), 0), unit),
+  )
+  const feedVol = breastVol.map((v, i) => v + formulaVol[i])
   const excByBucket = buckets.map((b) => {
     const ex = excretes.filter((e) => inBucket(e.timestamp, b))
     return {
@@ -1122,11 +1126,15 @@ function Charts({ feeds, excretes, weights, unit }: { feeds: FeedLog[]; excretes
 
       {/* Feed chart */}
       <div className="card rounded-2xl p-4">
-        <div className="mb-3 flex items-center justify-between">
+        <div className="mb-2 flex items-center justify-between">
           <span className="text-sm font-semibold">餵奶量趨勢</span>
-          <span className="text-xs text-[var(--muted)]">{periodLabel} · {unitLabel(unit)}/日</span>
+          <div className="flex items-center gap-3">
+            <span className="flex items-center gap-1 text-[10px] text-[var(--muted)]"><span className="h-2 w-2 rounded-full" style={{ background: 'var(--teal)' }} />母乳</span>
+            <span className="flex items-center gap-1 text-[10px] text-[var(--muted)]"><span className="h-2 w-2 rounded-full" style={{ background: '#f59e0b' }} />配方奶</span>
+          </div>
         </div>
-        <BarChart labels={label} data={feedVol} max={maxVol} color="var(--teal)" h={CHART_H} gap={cfg.gap} labelEvery={cfg.labelEvery} unit={unitLabel(unit)} />
+        <div className="mb-2 text-xs text-[var(--muted)]">{periodLabel} · {unitLabel(unit)}/日</div>
+        <BarChart labels={label} data={feedVol} max={maxVol} color="var(--teal)" h={CHART_H} gap={cfg.gap} labelEvery={cfg.labelEvery} unit={unitLabel(unit)} stack={[{ data: formulaVol, color: '#f59e0b' }]} />
       </div>
 
       {/* Excrete chart */}
@@ -1159,7 +1167,7 @@ function axisMax(v: number) {
   return Math.ceil(v / mag) * mag
 }
 
-function BarChart({ labels, data, max, color, h, gap = 4, labelEvery = 1, unit = '' }: { labels: string[]; data: number[]; max: number; color: string; h: number; gap?: number; labelEvery?: number; unit?: string }) {
+function BarChart({ labels, data, max, color, h, gap = 4, labelEvery = 1, unit = '', stack }: { labels: string[]; data: number[]; max: number; color: string; h: number; gap?: number; labelEvery?: number; unit?: string; stack?: { data: number[]; color: string }[] }) {
   // Responsive flex bars: flex-1 fills the container, so every period fits with no
   // horizontal scroll — bars just get narrower as the day count grows.
   const chartH = h - 24
@@ -1196,7 +1204,19 @@ function BarChart({ labels, data, max, color, h, gap = 4, labelEvery = 1, unit =
           {data.map((v, i) => (
             <div key={i} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end">
               {showValues && v > 0 && <span className="mb-1 text-[9px] leading-none text-[var(--muted)]">{v}</span>}
-              <div className="w-full rounded-t-[3px]" style={{ height: barPx(v), background: color, opacity: 0.85 }} />
+              {stack && stack.length > 0 ? (
+                <div className="flex w-full flex-col-reverse" style={{ height: Math.max(barPx(v), 1) }}>
+                  {[v, ...stack.map((s) => s.data[i])].map((seg, si) => {
+                    const segH = Math.max(barPx(seg), seg > 0 ? 2 : 0)
+                    if (segH <= 0) return null
+                    const segColor = si === 0 ? color : stack[si - 1].color
+                    const isTop = si === stack.length
+                    return <div key={si} className={isTop ? 'w-full rounded-t-[3px]' : 'w-full'} style={{ height: segH, background: segColor, opacity: 0.85 }} />
+                  })}
+                </div>
+              ) : (
+                <div className="w-full rounded-t-[3px]" style={{ height: barPx(v), background: color, opacity: 0.85 }} />
+              )}
             </div>
           ))}
         </div>
