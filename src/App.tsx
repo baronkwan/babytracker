@@ -1372,12 +1372,12 @@ function Charts({ feeds, excretes, weights, unit }: { feeds: FeedLog[]; excretes
         <div className="mb-2 flex items-center justify-between">
           <span className="text-sm font-semibold">排泄頻率</span>
           <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1 text-[10px] text-[var(--muted)]"><span className="h-2 w-2 rounded-full" style={{ background: 'var(--pink)' }} />尿</span>
+            <span className="flex items-center gap-1 text-[10px] text-[var(--muted)]"><span className="h-2 w-2 rounded-full" style={{ background: 'var(--blue)' }} />尿</span>
             <span className="flex items-center gap-1 text-[10px] text-[var(--muted)]"><span className="h-2 w-2 rounded-full" style={{ background: 'var(--amber)' }} />屎</span>
           </div>
         </div>
         <div className="mb-3 text-xs text-[var(--muted)]">{periodLabel} · 次/日</div>
-        <BarChart labels={label} data={excByBucket.map((d) => d.wet)} max={maxEx} color="var(--pink)" h={CHART_H} gap={cfg.gap} labelEvery={cfg.labelEvery} unit="次" stack={[{ data: excByBucket.map((d) => d.poop), color: 'var(--amber)' }]} />
+        <BarChart labels={label} data={excByBucket.map((d) => d.wet)} max={maxEx} color="var(--blue)" h={CHART_H} gap={cfg.gap} labelEvery={cfg.labelEvery} unit="次" stack={[{ data: excByBucket.map((d) => d.poop), color: 'var(--amber)' }]} />
       </div>
 
       {/* Weight chart */}
