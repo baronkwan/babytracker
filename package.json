@@ -12,6 +12,7 @@
     "deploy:worker": "wrangler deploy -c wrangler.toml"
   },
   "dependencies": {
+    "@appica/ui-react": "^1.0.0",
     "@tailwindcss/vite": "^4.3.3",
     "bcryptjs": "^2.4.3",
     "date-fns": "^4.4.0",

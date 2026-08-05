@@ -1,4 +1,7 @@
 @import "tailwindcss";
+@import '@appica/ui-react/styles.css';
+
+@source '../node_modules/@appica/ui-react/dist';
 
 :root {
   --bg: #f8fafc;
@@ -20,6 +23,41 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06);
   color-scheme: light;
+
+  /* ── Appica UI token overrides (light) ── */
+  --primary: #0f766e;
+  --primary-foreground: #ffffff;
+  --primary-subtle: rgba(15, 118, 110, 0.06);
+  --primary-soft: rgba(15, 118, 110, 0.1);
+  --primary-muted: #0d9488;
+  --primary-strong: #115e59;
+  --secondary: #be185d;
+  --secondary-foreground: #ffffff;
+  --secondary-subtle: rgba(190, 24, 93, 0.06);
+  --secondary-soft: rgba(190, 24, 93, 0.1);
+  --secondary-muted: #db2777;
+  --secondary-strong: #9d174d;
+  --background: #f8fafc;
+  --background-subtle: #f1f5f9;
+  --background-muted: #e2e8f0;
+  --background-strong: #ffffff;
+  --foreground: #0f172a;
+  --foreground-muted: #64748b;
+  --foreground-strong: #0f172a;
+  --border: #e2e8f0;
+  --border-muted: #f1f5f9;
+  --border-strong: #cbd5e1;
+  --error: #dc2626;
+  --error-soft: rgba(220, 38, 38, 0.1);
+  --warning: #b45309;
+  --warning-soft: rgba(180, 83, 9, 0.1);
+  --success: #0f766e;
+  --success-soft: rgba(15, 118, 110, 0.1);
+  --info: #1d4ed8;
+  --info-soft: rgba(29, 78, 216, 0.1);
+  --radius: 1rem;
+  --focus-ring-primary: rgba(15, 118, 110, 0.35);
+  --shadow-color: rgba(15, 23, 42, 0.08);
 }
 
 .dark {
@@ -40,6 +78,41 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
   --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
   color-scheme: dark;
+
+  /* ── Appica UI token overrides (dark) ── */
+  --primary: #2dd4bf;
+  --primary-foreground: #0b1220;
+  --primary-subtle: rgba(45, 212, 191, 0.08);
+  --primary-soft: rgba(45, 212, 191, 0.14);
+  --primary-muted: #5eead4;
+  --primary-strong: #14b8a6;
+  --secondary: #f472b6;
+  --secondary-foreground: #0b1220;
+  --secondary-subtle: rgba(244, 114, 182, 0.08);
+  --secondary-soft: rgba(244, 114, 182, 0.14);
+  --secondary-muted: #f9a8d4;
+  --secondary-strong: #ec4899;
+  --background: #0b1220;
+  --background-subtle: #1a2438;
+  --background-muted: #2a3650;
+  --background-strong: #121a2b;
+  --foreground: #e8eefc;
+  --foreground-muted: #8b9bb8;
+  --foreground-strong: #e8eefc;
+  --border: #2a3650;
+  --border-muted: #1a2438;
+  --border-strong: #3b4a6b;
+  --error: #f87171;
+  --error-soft: rgba(248, 113, 113, 0.14);
+  --warning: #fbbf24;
+  --warning-soft: rgba(251, 191, 36, 0.14);
+  --success: #2dd4bf;
+  --success-soft: rgba(45, 212, 191, 0.14);
+  --info: #60a5fa;
+  --info-soft: rgba(96, 165, 250, 0.14);
+  --radius: 1rem;
+  --focus-ring-primary: rgba(45, 212, 191, 0.4);
+  --shadow-color: rgba(0, 0, 0, 0.35);
 }
 
 html,
@@ -83,6 +156,26 @@ input,
 select,
 textarea {
   font-size: 16px; /* prevent iOS zoom */
+}
+
+/* Native date/time pickers carry UA min-widths + internal webkit elements
+   that blow up grid/flex cells (esp. iOS). Force them to shrink and clip. */
+input[type="date"],
+input[type="time"] {
+  -webkit-appearance: none;
+  appearance: none;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+input[type="date"]::-webkit-date-and-time-value,
+input[type="time"]::-webkit-date-and-time-value {
+  min-width: 0;
+}
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="time"]::-webkit-calendar-picker-indicator {
+  flex-shrink: 0;
 }
 
 button:disabled {

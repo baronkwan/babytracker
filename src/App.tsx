@@ -25,6 +25,13 @@ import {
   unitLabel,
 } from './lib/utils'
 import { api, setToken, clearToken, getToken } from './lib/api'
+import { Button } from '@appica/ui-react/button'
+import { Badge as AppicaBadge } from '@appica/ui-react/badge'
+import { Chip } from '@appica/ui-react/chip'
+import { Input } from '@appica/ui-react/input'
+import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription, DrawerBody, DrawerFooter } from '@appica/ui-react/drawer'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@appica/ui-react/select'
+import { useToastManager } from '@appica/ui-react/toast'
 import {
   BarChart3,
   Check,
@@ -396,33 +403,36 @@ function Header({
             </div>
           </div>
           <div className="flex items-center gap-1.5">
-            <button onClick={toggleTheme} aria-label="切換主題" className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] active:bg-[var(--surface2)]">
+            <Button variant="outline" size="icon-md" onClick={toggleTheme} aria-label="切換主題">
               {theme === 'dark' ? <Sun size={18} /> : <MoonStar size={18} />}
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="outline"
+              size="icon-md"
               onClick={() => setShowReport(true)}
-              className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] active:bg-[var(--surface2)]"
               aria-label="報告"
             >
               <Stethoscope size={18} />
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="outline"
+              size="icon-md"
               onClick={() => setShowSettings(true)}
-              className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] active:bg-[var(--surface2)]"
               aria-label="設定"
             >
               <Settings size={18} />
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="outline"
+              size="icon-md"
               onClick={onOpenAdmin}
               aria-label="建立用戶"
-              className="flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] active:bg-[var(--surface2)]"
             >
               <UserPlus size={18} />
-            </button>
-            <button onClick={onLogout} aria-label="登出" className="flex h-9 w-9 items-center justify-center text-[var(--muted)] active:text-[var(--red)]">
+            </Button>
+            <Button variant="ghost" size="icon-md" onClick={onLogout} aria-label="登出" className="text-[var(--muted)] hover:text-[var(--red)]">
               <LogOut size={18} />
-            </button>
+            </Button>
           </div>
         </div>
         {tab === 'home' ? (
@@ -512,16 +522,18 @@ function Home({
   return (
     <div className="space-y-4 rise">
       {/* Quick action */}
-      <button
+      <Button
         onClick={() => setTab('record')}
-        className="card flex w-full items-center gap-3 rounded-2xl p-4 text-left transition-transform active:scale-[0.98]"
+        variant="soft"
+        size="lg"
+        className="card flex w-full items-center justify-start gap-3 rounded-2xl p-4 text-left"
       >
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[var(--teal-dim)] to-[var(--pink-dim)] text-[var(--teal)]"><SquarePen size={20} /></div>
         <div>
           <div className="text-sm font-semibold">記錄餵奶 / 排泄</div>
           <div className="text-xs text-[var(--muted)]">同一頁搞掂，可以一齊記</div>
         </div>
-      </button>
+      </Button>
 
       {/* Today stats */}
       <div className="grid grid-cols-2 gap-3">
@@ -570,12 +582,14 @@ function Home({
             </div>
             {latestW && <div className="mt-0.5 text-xs text-[var(--muted)]">{fmtAgo(latestW.timestamp)} · 共 {weights.length} 次</div>}
           </div>
-          <button
+          <Button
             onClick={() => setShowWeight(true)}
-            className="flex items-center gap-1.5 rounded-xl bg-[var(--blue-dim)] px-3 py-2 text-xs font-semibold text-[var(--blue)] active:opacity-80"
+            variant="soft"
+            size="sm"
+            className="gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-[var(--blue)]"
           >
             <Weight size={14} /> 記錄
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -634,29 +648,33 @@ function LogCard({ log, unit, bare = false, onDelete, onEdit }: { log: LogEntry;
           </div>
           <div className="flex flex-shrink-0 items-center gap-1.5">
             {onEdit && (
-              <button
+              <Button
+                variant="ghost"
+                size="icon-sm"
                 onClick={(e) => { e.stopPropagation(); onEdit() }}
-                className="text-[var(--muted)] active:text-[var(--teal)]"
                 aria-label="編輯"
               >
                 <SquarePen size={15} />
-              </button>
+              </Button>
             )}
             {confirm ? (
-              <button
+              <Button
+                variant="soft"
+                size="sm"
                 onClick={(e) => { e.stopPropagation(); onDelete() }}
-                className="rounded-lg bg-[var(--red)]/10 px-2 py-1 text-xs font-semibold text-[var(--red)] active:bg-[var(--red)]/20"
+                className="rounded-lg bg-[var(--red)]/10 px-2 py-1 text-xs font-semibold text-[var(--red)] hover:bg-[var(--red)]/20"
               >
                 確認?
-              </button>
+              </Button>
             ) : (
-              <button
+              <Button
+                variant="ghost"
+                size="icon-sm"
                 onClick={(e) => { e.stopPropagation(); setConfirm(true); setTimeout(() => setConfirm(false), 3000) }}
-                className="text-[var(--muted)] active:text-[var(--red)]"
                 aria-label="刪除"
               >
                 <X size={16} />
-              </button>
+              </Button>
             )}
           </div>
         </div>
@@ -680,20 +698,24 @@ function LogCard({ log, unit, bare = false, onDelete, onEdit }: { log: LogEntry;
             </div>
           </div>
           {confirm ? (
-            <button
+            <Button
+              variant="soft"
+              size="sm"
               onClick={(e) => { e.stopPropagation(); onDelete() }}
-              className="flex-shrink-0 rounded-lg bg-[var(--red)]/10 px-2 py-1 text-xs font-semibold text-[var(--red)] active:bg-[var(--red)]/20"
+              className="flex-shrink-0 rounded-lg bg-[var(--red)]/10 px-2 py-1 text-xs font-semibold text-[var(--red)] hover:bg-[var(--red)]/20"
             >
               確認?
-            </button>
+            </Button>
           ) : (
-            <button
+            <Button
+              variant="ghost"
+              size="icon-sm"
               onClick={(e) => { e.stopPropagation(); setConfirm(true); setTimeout(() => setConfirm(false), 3000) }}
-              className="flex-shrink-0 text-[var(--muted)] active:text-[var(--red)]"
+              className="flex-shrink-0 text-[var(--muted)] hover:text-[var(--red)]"
               aria-label="刪除"
             >
               <X size={16} />
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -716,29 +738,35 @@ function LogCard({ log, unit, bare = false, onDelete, onEdit }: { log: LogEntry;
         </div>
         <div className="flex flex-shrink-0 items-center gap-1.5">
           {onEdit && (
-            <button
+            <Button
+              variant="ghost"
+              size="icon-sm"
               onClick={(e) => { e.stopPropagation(); onEdit() }}
-              className="text-[var(--muted)] active:text-[var(--pink)]"
+              className="text-[var(--muted)] hover:text-[var(--pink)]"
               aria-label="編輯"
             >
               <SquarePen size={15} />
-            </button>
+            </Button>
           )}
           {confirm ? (
-            <button
+            <Button
+              variant="soft"
+              size="sm"
               onClick={(e) => { e.stopPropagation(); onDelete() }}
-              className="rounded-lg bg-[var(--red)]/10 px-2 py-1 text-xs font-semibold text-[var(--red)] active:bg-[var(--red)]/20"
+              className="rounded-lg bg-[var(--red)]/10 px-2 py-1 text-xs font-semibold text-[var(--red)] hover:bg-[var(--red)]/20"
             >
               確認?
-            </button>
+            </Button>
           ) : (
-            <button
+            <Button
+              variant="ghost"
+              size="icon-sm"
               onClick={(e) => { e.stopPropagation(); setConfirm(true); setTimeout(() => setConfirm(false), 3000) }}
-              className="text-[var(--muted)] active:text-[var(--red)]"
+              className="text-[var(--muted)] hover:text-[var(--red)]"
               aria-label="刪除"
             >
               <X size={16} />
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -748,12 +776,14 @@ function LogCard({ log, unit, bare = false, onDelete, onEdit }: { log: LogEntry;
 
 function Badge({ color, label }: { color: string; label: string }) {
   return (
-    <span
-      className="inline-flex rounded-full px-2 py-0.5 text-xs font-semibold"
+    <AppicaBadge
+      variant="soft"
+      size="sm"
+      className="text-xs font-semibold"
       style={{ backgroundColor: `color-mix(in srgb, ${color} 15%, transparent)`, color }}
     >
       {label}
-    </span>
+    </AppicaBadge>
   )
 }
 
@@ -789,9 +819,7 @@ function CombinedForm({ baby, feeds, excretes, editLog, onEditDone, addFeed, add
   const [time, setTime] = useState(nowLocalTime())
   // quick speech/text input
   const [speechInput, setSpeechInput] = useState('')
-  const [parseErr, setParseErr] = useState(false)
-  const [parseMsg, setParseMsg] = useState('')
-  const [saveMsg, setSaveMsg] = useState('')
+  const toastManager = useToastManager()
   const supportsSR = typeof window !== 'undefined' && !!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)
 
   // Edit mode: pre-fill the form from the record being edited.
@@ -829,11 +857,9 @@ function CombinedForm({ baby, feeds, excretes, editLog, onEditDone, addFeed, add
     const r = parseSpeechText(speechInput)
     const nothing = r.breastVolume === 0 && r.formulaVolume === 0 && !r.excreteType && !r.color && !r.texture && !r.time
     if (nothing) {
-      setParseErr(true)
-      setParseMsg('')
+      toastManager.add({ title: '⚠️ 未辨識到內容', description: '試下跟住下面嘅講法' })
       return
     }
-    setParseErr(false)
     if (r.breastVolume > 0) setBreast(String(r.breastVolume))
     if (r.formulaVolume > 0) setFormula(String(r.formulaVolume))
     if (r.excreteType) {
@@ -854,7 +880,7 @@ function CombinedForm({ baby, feeds, excretes, editLog, onEditDone, addFeed, add
     if (r.time) parts.push(`時間 ${r.time}`)
     if (r.color) parts.push(`顏色 ${r.color}`)
     if (r.texture) parts.push(`質地 ${r.texture}`)
-    setParseMsg(parts.length ? `已填入：${parts.join(' · ')}` : '')
+    toastManager.add({ title: '✅ 已填入', description: parts.join(' · ') || '請檢查表單' })
     setSpeechInput('')
   }
 
@@ -871,7 +897,6 @@ function CombinedForm({ baby, feeds, excretes, editLog, onEditDone, addFeed, add
     // Edit mode: update the record in place (same id), no duplicate guard —
     // the user is intentionally changing an existing record.
     if (editLog) {
-      setSaveMsg('')
       if (editLog.kind === 'feed' && hasFeed) {
         updateFeed({ id: editLog.id, kind: 'feed', timestamp: ts, breastVolume: bv, formulaVolume: fv, duration: dur, side: bv > 0 ? side : null, notes: notes.trim() })
       }
@@ -894,10 +919,12 @@ function CombinedForm({ baby, feeds, excretes, editLog, onEditDone, addFeed, add
     if (dupFeed) dupParts.push('餵奶')
     if (dupExcrete) dupParts.push('排泄')
     if (dupParts.length) {
-      setSaveMsg(`⚠️ ${fmtDateTime(ts)} 已存在相同${dupParts.join('、')}記錄 — 已略過重複。可去歷史頁刪除該記錄，或改時間/內容後再儲存`)
+      toastManager.add({
+        title: '⚠️ 重複記錄',
+        description: `${fmtDateTime(ts)} 已存在相同${dupParts.join('、')}記錄 — 已略過重複。可去歷史頁刪除該記錄，或改時間/內容後再儲存`,
+      })
       return
     }
-    setSaveMsg('')
     if (hasFeed) {
       addFeed({
         id: makeId(),
@@ -927,6 +954,10 @@ function CombinedForm({ baby, feeds, excretes, editLog, onEditDone, addFeed, add
     setExType('none'); setPeeSize(''); setPooSize(''); setColor(''); setTexture(''); setNotes('')
     setDate(todayLocal()); setTime(nowLocalTime())
     setTab('home')
+    toastManager.add({
+      title: '✅ 已儲存',
+      description: `${fmtDateTime(ts)} · ${hasFeed && hasExcrete ? '餵奶 + 排泄' : hasFeed ? '餵奶' : '排泄'}`,
+    })
   }
 
   return (
@@ -944,43 +975,41 @@ function CombinedForm({ baby, feeds, excretes, editLog, onEditDone, addFeed, add
           <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">快速輸入</span>
         </div>
         <div className="flex gap-2">
-          <input
+          <Input
             value={speechInput}
             onChange={(e) => setSpeechInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && applyParse()}
             placeholder="例：70ml 母乳 30ml 配方奶 有尿有屎"
-            className="field min-w-0 flex-1"
+            className="min-w-0 flex-1"
             autoComplete="off"
             autoCorrect="off"
             spellCheck={false}
           />
           {supportsSR && (
-            <button onClick={startListening} aria-label="語音輸入" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--surface2)] text-[var(--teal)] active:bg-[var(--surface)]">
+            <Button variant="soft" size="icon-md" onClick={startListening} aria-label="語音輸入">
               <Mic size={18} />
-            </button>
+            </Button>
           )}
-          <button onClick={applyParse} className="shrink-0 rounded-xl bg-[var(--teal)] px-4 text-sm font-semibold text-white active:opacity-80">
+          <Button onClick={applyParse} variant="primary" className="shrink-0 px-4 text-sm font-semibold">
             解析
-          </button>
+          </Button>
         </div>
-        {parseErr && <div className="mt-2 text-xs text-red-400">未辨識到內容，試下跟住下面嘅講法</div>}
-        {parseMsg && <div className="mt-2 text-xs font-medium text-[var(--teal)]">{parseMsg}</div>}
-        <button onClick={() => setSpeechInput('今日 下午2點 70ml 母乳 30ml 配方奶 30分鐘 有尿有屎 黃色 軟')} className="mt-2 block text-left text-[10px] leading-relaxed text-[var(--muted)]">
+        <Button onClick={() => setSpeechInput('今日 下午2點 70ml 母乳 30ml 配方奶 30分鐘 有尿有屎 黃色 軟')} variant="ghost" size="sm" className="mt-2 block h-auto min-h-0 w-full whitespace-normal break-words px-0 text-left text-[10px] leading-relaxed text-[var(--muted)]">
           💡 推薦講法（撳即自動填）：「今日 下午2點 70ml 母乳 30ml 配方奶 30分鐘 有尿有屎 黃色 軟」
-        </button>
+        </Button>
       </div>
 
       {/* Time */}
       <div className="card rounded-2xl p-4">
         <div className="mb-2 flex items-center justify-between">
           <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">時間</span>
-          <button onClick={() => { setDate(todayLocal()); setTime(nowLocalTime()) }} className="text-xs font-semibold text-[var(--teal)] active:opacity-60">
+          <Button variant="ghost" size="sm" onClick={() => { setDate(todayLocal()); setTime(nowLocalTime()) }} className="text-xs font-semibold text-[var(--teal)]">
             現在
-          </button>
+          </Button>
         </div>
-        <div className="grid grid-cols-2 gap-2">
-          <input type="date" value={date} max={todayLocal()} onChange={(e) => setDate(e.target.value)} className="field" />
-          <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="field" />
+        <div className="flex gap-2">
+          <Input type="date" value={date} max={todayLocal()} onChange={(e) => setDate(e.target.value)} className="min-w-0 flex-1" />
+          <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="min-w-0 flex-1" />
         </div>
       </div>
 
@@ -991,31 +1020,33 @@ function CombinedForm({ baby, feeds, excretes, editLog, onEditDone, addFeed, add
         <div className="mb-4 grid grid-cols-2 gap-2">
           <div className="min-w-0">
             <div className="mb-1.5 text-xs font-medium text-[var(--muted)]">母乳 ({unitLabel(baby.unit)})</div>
-            <input value={breast} onChange={(e) => setBreast(e.target.value)} placeholder="0" inputMode="numeric" className="field py-3 text-center text-lg font-semibold" />
+            <Input value={breast} onChange={(e) => setBreast(e.target.value)} placeholder="0" inputMode="numeric" className="py-3 text-center text-lg font-semibold" />
             <div className="mt-1.5 flex flex-wrap gap-1.5">
               {[30, 60, 90, 120, 150].map((v) => (
-                <button
+                <Chip
                   key={v}
+                  size="sm"
+                  variant={breast === String(v) ? 'primary' : 'soft'}
                   onClick={() => setBreast(breast === String(v) ? '' : String(v))}
-                  className={`min-w-0 rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors ${breast === String(v) ? 'border-[var(--teal)] bg-[var(--teal-dim)] text-[var(--teal)]' : 'border-[var(--border)] bg-[var(--surface2)] text-[var(--muted)]'}`}
                 >
                   {v}
-                </button>
+                </Chip>
               ))}
             </div>
           </div>
           <div className="min-w-0">
             <div className="mb-1.5 text-xs font-medium text-[var(--muted)]">配方奶 ({unitLabel(baby.unit)})</div>
-            <input value={formula} onChange={(e) => setFormula(e.target.value)} placeholder="0" inputMode="numeric" className="field py-3 text-center text-lg font-semibold" />
+            <Input value={formula} onChange={(e) => setFormula(e.target.value)} placeholder="0" inputMode="numeric" className="py-3 text-center text-lg font-semibold" />
             <div className="mt-1.5 flex flex-wrap gap-1.5">
               {[30, 60, 90, 120, 150].map((v) => (
-                <button
+                <Chip
                   key={v}
+                  size="sm"
+                  variant={formula === String(v) ? 'primary' : 'soft'}
                   onClick={() => setFormula(formula === String(v) ? '' : String(v))}
-                  className={`min-w-0 rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors ${formula === String(v) ? 'border-[var(--teal)] bg-[var(--teal-dim)] text-[var(--teal)]' : 'border-[var(--border)] bg-[var(--surface2)] text-[var(--muted)]'}`}
                 >
                   {v}
-                </button>
+                </Chip>
               ))}
             </div>
           </div>
@@ -1025,25 +1056,30 @@ function CombinedForm({ baby, feeds, excretes, editLog, onEditDone, addFeed, add
           <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">時長（分鐘）</div>
           <div className="flex flex-wrap gap-2">
             {DURATION_CHIPS.map((v) => (
-              <button key={v} onClick={() => setDuration(String(v))} className={`chip text-sm min-w-0 ${String(v) === duration ? 'active' : ''}`}>
+              <Chip
+                key={v}
+                variant={String(v) === duration ? 'primary' : 'soft'}
+                onClick={() => setDuration(String(v))}
+              >
                 {v}
-              </button>
+              </Chip>
             ))}
           </div>
-          <input value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="自訂" inputMode="numeric" className="field mt-2" />
+          <Input value={duration} onChange={(e) => setDuration(e.target.value)} placeholder="自訂" inputMode="numeric" className="mt-2" />
         </div>
 
         <div>
           <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">邊別（母乳）</div>
           <div className="grid grid-cols-3 gap-1 rounded-2xl bg-[var(--surface2)] p-1">
             {(['left', 'right', 'both'] as const).map((s) => (
-              <button
+              <Button
                 key={s}
+                variant={side === s ? 'primary' : 'ghost'}
                 onClick={() => setSide(s)}
-                className={`min-w-0 truncate rounded-xl px-2 py-2.5 text-sm font-semibold transition-colors ${side === s ? 'bg-[var(--surface)] text-[var(--teal)] shadow-sm' : 'text-[var(--muted)]'}`}
+                className={`min-w-0 truncate rounded-xl px-2 py-2.5 text-sm font-semibold ${side === s ? '' : 'text-[var(--muted)]'}`}
               >
                 {sideLabel(s)}
-              </button>
+              </Button>
             ))}
           </div>
         </div>
@@ -1054,13 +1090,14 @@ function CombinedForm({ baby, feeds, excretes, editLog, onEditDone, addFeed, add
         <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">排泄（可略過）</div>
         <div className="grid grid-cols-3 gap-1 rounded-2xl bg-[var(--surface2)] p-1">
           {(['wet', 'poop', 'both'] as const).map((t) => (
-            <button
+            <Button
               key={t}
+              variant={exType === t ? 'secondary' : 'ghost'}
               onClick={() => setExType(exType === t ? 'none' : t)}
-              className={`min-w-0 truncate rounded-xl px-2 py-2.5 text-sm font-semibold transition-colors ${exType === t ? 'bg-[var(--surface)] text-[var(--pink)] shadow-sm' : 'text-[var(--muted)]'}`}
+              className={`min-w-0 truncate rounded-xl px-2 py-2.5 text-sm font-semibold ${exType === t ? '' : 'text-[var(--muted)]'}`}
             >
               {t === 'wet' ? '淨尿' : t === 'poop' ? '淨便' : '尿+便'}
-            </button>
+            </Button>
           ))}
         </div>
 
@@ -1069,13 +1106,14 @@ function CombinedForm({ baby, feeds, excretes, editLog, onEditDone, addFeed, add
             <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">尿量</div>
             <div className="grid grid-cols-2 gap-1 rounded-2xl bg-[var(--surface2)] p-1">
               {(['少', '多'] as const).map((s) => (
-                <button
+                <Button
                   key={s}
+                  variant={peeSize === s ? 'secondary' : 'ghost'}
                   onClick={() => setPeeSize(s)}
-                  className={`min-w-0 truncate rounded-xl px-2 py-2.5 text-sm font-semibold transition-colors ${peeSize === s ? 'bg-[var(--surface)] text-[var(--pink)] shadow-sm' : 'text-[var(--muted)]'}`}
+                  className={`min-w-0 truncate rounded-xl px-2 py-2.5 text-sm font-semibold ${peeSize === s ? '' : 'text-[var(--muted)]'}`}
                 >
                   {s}
-                </button>
+                </Button>
               ))}
             </div>
           </div>
@@ -1087,13 +1125,14 @@ function CombinedForm({ baby, feeds, excretes, editLog, onEditDone, addFeed, add
               <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">便量</div>
               <div className="grid grid-cols-2 gap-1 rounded-2xl bg-[var(--surface2)] p-1">
                 {(['少', '多'] as const).map((s) => (
-                  <button
+                  <Button
                     key={s}
+                    variant={pooSize === s ? 'secondary' : 'ghost'}
                     onClick={() => setPooSize(s)}
-                    className={`min-w-0 truncate rounded-xl px-2 py-2.5 text-sm font-semibold transition-colors ${pooSize === s ? 'bg-[var(--surface)] text-[var(--pink)] shadow-sm' : 'text-[var(--muted)]'}`}
+                    className={`min-w-0 truncate rounded-xl px-2 py-2.5 text-sm font-semibold ${pooSize === s ? '' : 'text-[var(--muted)]'}`}
                   >
                     {s}
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>
@@ -1102,9 +1141,14 @@ function CombinedForm({ baby, feeds, excretes, editLog, onEditDone, addFeed, add
                 <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">顏色</div>
                 <div className="flex flex-wrap gap-1.5">
                   {POOP_COLORS.map((c) => (
-                    <button key={c} onClick={() => setColor(c)} className={`chip text-sm min-w-0 ${c === color ? 'pink active' : ''}`}>
+                    <Chip
+                      key={c}
+                      size="sm"
+                      variant={c === color ? 'secondary' : 'soft'}
+                      onClick={() => setColor(c)}
+                    >
                       {c}
-                    </button>
+                    </Chip>
                   ))}
                 </div>
               </div>
@@ -1112,9 +1156,14 @@ function CombinedForm({ baby, feeds, excretes, editLog, onEditDone, addFeed, add
                 <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">質地</div>
                 <div className="flex flex-wrap gap-1.5">
                   {POOP_TEXTURES.map((t) => (
-                    <button key={t} onClick={() => setTexture(t)} className={`chip text-sm min-w-0 ${t === texture ? 'pink active' : ''}`}>
+                    <Chip
+                      key={t}
+                      size="sm"
+                      variant={t === texture ? 'secondary' : 'soft'}
+                      onClick={() => setTexture(t)}
+                    >
                       {t}
-                    </button>
+                    </Chip>
                   ))}
                 </div>
               </div>
@@ -1126,19 +1175,18 @@ function CombinedForm({ baby, feeds, excretes, editLog, onEditDone, addFeed, add
       {/* Notes */}
       <div className="card rounded-2xl p-4">
         <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">備註</div>
-        <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="選填" className="field" />
+        <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="選填" />
       </div>
 
       {/* Sticky save bar */}
       <div className="sticky bottom-0 -mx-4 mt-5 border-t border-[var(--border)] bg-[var(--bg)]/90 px-4 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 backdrop-blur-md">
-        {saveMsg && <div className="mb-2 text-center text-xs font-medium text-red-400">{saveMsg}</div>}
-        <button onClick={save} disabled={!hasFeed && !hasExcrete} className="btn-primary flex w-full items-center justify-center gap-2 py-3.5 text-base">
+        <Button onClick={save} disabled={!hasFeed && !hasExcrete} variant="primary" size="lg" className="flex w-full items-center justify-center gap-2 py-3.5 text-base">
           {editLog ? '✓ 更新記錄' : '✓ 儲存記錄'}
-        </button>
+        </Button>
         {editLog && (
-          <button onClick={() => { onEditDone(); setBreast(''); setFormula(''); setDuration(''); setSide('both'); setExType('none'); setPeeSize(''); setPooSize(''); setColor(''); setTexture(''); setNotes(''); setDate(todayLocal()); setTime(nowLocalTime()); setTab('home') }} className="mt-2 w-full text-center text-xs font-semibold text-[var(--muted)] active:opacity-60">
+          <Button onClick={() => { onEditDone(); setBreast(''); setFormula(''); setDuration(''); setSide('both'); setExType('none'); setPeeSize(''); setPooSize(''); setColor(''); setTexture(''); setNotes(''); setDate(todayLocal()); setTime(nowLocalTime()); setTab('home') }} variant="ghost" className="mt-2 w-full text-center text-xs font-semibold text-[var(--muted)]">
             取消編輯
-          </button>
+          </Button>
         )}
       </div>
     </div>
@@ -1189,38 +1237,39 @@ function History({ allLogs, deleteLog, onEdit, unit }: { allLogs: LogEntry[]; de
     <div className="space-y-3 rise">
       <div className="flex flex-wrap gap-2">
         {(['all', 'feed', 'excrete', 'weight'] as const).map((f) => (
-          <button
+          <Chip
             key={f}
+            size="sm"
+            variant={filter === f ? 'primary' : 'soft'}
             onClick={() => setFilter(f)}
-            className={`chip text-xs ${filter === f ? 'active' : ''}`}
           >
             {f === 'all' ? '全部' : f === 'feed' ? '餵奶' : f === 'excrete' ? '排泄' : '重量'}
-          </button>
+          </Chip>
         ))}
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {datePresets.map((p) => (
-          <button
+          <Chip
             key={p.id}
+            size="sm"
+            variant={dateFilter === p.id ? 'primary' : 'soft'}
             onClick={() => setDateFilter(p.id)}
-            className={`chip text-xs ${dateFilter === p.id ? 'active' : ''}`}
           >
             {p.label}
-          </button>
+          </Chip>
         ))}
-        <input
+        <Input
           type="date"
           value={/^\d{4}-\d{2}-\d{2}$/.test(dateFilter) ? dateFilter : ''}
           max={todayLocal()}
           onChange={(e) => setDateFilter(e.target.value || '')}
-          className="field h-8 min-w-0 flex-1 text-xs"
+          className="h-8 min-w-0 flex-1 text-xs"
         />
       </div>
-      <input
+      <Input
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         placeholder="搜尋備註..."
-        className="field"
       />
       <div className="text-xs text-[var(--muted)]">共 {filtered.length} 條記錄</div>
       <div className="group-list">
@@ -1286,7 +1335,7 @@ function Charts({ feeds, excretes, weights, unit }: { feeds: FeedLog[]; excretes
   })
 
   const maxVol = Math.max(...feedVol, 1)
-  const maxEx = Math.max(...excByBucket.map((d) => d.total), 1)
+  const maxEx = Math.max(...excByBucket.map((d) => d.wet + d.poop), 1)
   const maxW = Math.max(...weightSeries, 1)
   const CHART_H = 160
 
@@ -1294,9 +1343,14 @@ function Charts({ feeds, excretes, weights, unit }: { feeds: FeedLog[]; excretes
     <div className="space-y-5 rise">
       <div className="flex gap-2">
         {PERIODS.map((p) => (
-          <button key={p.id} onClick={() => setPeriod(p.id)} className={`chip flex-1 text-center text-xs ${period === p.id ? 'active' : ''}`}>
+          <Chip
+            key={p.id}
+            variant={period === p.id ? 'primary' : 'soft'}
+            onClick={() => setPeriod(p.id)}
+            className="flex-1 text-center text-xs"
+          >
             {p.label}
-          </button>
+          </Chip>
         ))}
       </div>
 
@@ -1315,11 +1369,15 @@ function Charts({ feeds, excretes, weights, unit }: { feeds: FeedLog[]; excretes
 
       {/* Excrete chart */}
       <div className="card rounded-2xl p-4">
-        <div className="mb-3 flex items-center justify-between">
+        <div className="mb-2 flex items-center justify-between">
           <span className="text-sm font-semibold">排泄頻率</span>
-          <span className="text-xs text-[var(--muted)]">{periodLabel} · 次/日</span>
+          <div className="flex items-center gap-3">
+            <span className="flex items-center gap-1 text-[10px] text-[var(--muted)]"><span className="h-2 w-2 rounded-full" style={{ background: 'var(--pink)' }} />尿</span>
+            <span className="flex items-center gap-1 text-[10px] text-[var(--muted)]"><span className="h-2 w-2 rounded-full" style={{ background: 'var(--amber)' }} />屎</span>
+          </div>
         </div>
-        <BarChart labels={label} data={excByBucket.map((d) => d.total)} max={maxEx} color="var(--pink)" h={CHART_H} gap={cfg.gap} labelEvery={cfg.labelEvery} unit="次" />
+        <div className="mb-3 text-xs text-[var(--muted)]">{periodLabel} · 次/日</div>
+        <BarChart labels={label} data={excByBucket.map((d) => d.wet)} max={maxEx} color="var(--pink)" h={CHART_H} gap={cfg.gap} labelEvery={cfg.labelEvery} unit="次" stack={[{ data: excByBucket.map((d) => d.poop), color: 'var(--amber)' }]} />
       </div>
 
       {/* Weight chart */}
@@ -1427,67 +1485,59 @@ function SettingsModal({
   onClose: () => void
 }) {
   const [form, setForm] = useState(baby)
-  const [closing, setClosing] = useState(false)
-
-  const close = () => {
-    setClosing(true)
-    setTimeout(onClose, 180)
-  }
 
   const save = () => {
     saveBaby(form)
-    close()
+    onClose()
   }
 
   return (
-    <div
-      onClick={(e) => { if (e.target === e.currentTarget) close() }}
-      className={`fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center ${closing ? 'modal-scrim-exit' : 'modal-scrim'}`}
-    >
-      <div className={`w-full max-w-[420px] rounded-t-2xl bg-[var(--surface)] p-5 sm:rounded-2xl sm:m-4 ${closing ? 'modal-sheet exit' : 'modal-sheet'}`}>
-        <div className="mb-4 flex items-center justify-between">
-          <span className="text-lg font-semibold">設定</span>
-          <button onClick={close} aria-label="關閉" className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--muted)] active:bg-[var(--surface2)]"><X size={18} /></button>
-        </div>
-        <div className="space-y-3">
+    <Drawer open onOpenChange={(o) => { if (!o) onClose() }}>
+      <DrawerContent closeButton>
+        <DrawerHeader>
+          <DrawerTitle>設定</DrawerTitle>
+          <DrawerDescription>寶寶資料同單位</DrawerDescription>
+        </DrawerHeader>
+        <DrawerBody className="space-y-3">
           <div>
             <div className="mb-1 text-xs text-[var(--muted)]">寶寶姓名</div>
-            <input
+            <Input
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="field"
               placeholder="小寶寶"
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <div className="mb-1 text-xs text-[var(--muted)]">出生日期</div>
-              <input
+              <Input
                 type="date"
                 value={form.dob}
                 onChange={(e) => setForm({ ...form, dob: e.target.value })}
-                className="field"
               />
             </div>
             <div>
               <div className="mb-1 text-xs text-[var(--muted)]">性別</div>
-              <select
+              <Select
                 value={form.gender}
-                onChange={(e) => setForm({ ...form, gender: e.target.value as BabyProfile['gender'] })}
-                className="field"
+                onValueChange={(v) => setForm({ ...form, gender: v as BabyProfile['gender'] })}
               >
-                <option value="女">女寶寶</option>
-                <option value="男">男寶寶</option>
-              </select>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="女">女寶寶</SelectItem>
+                  <SelectItem value="男">男寶寶</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <div>
             <div className="mb-1 text-xs text-[var(--muted)]">出生體重 (g)</div>
-            <input
+            <Input
               type="number"
               value={form.birthWeight || ''}
               onChange={(e) => setForm({ ...form, birthWeight: Number(e.target.value) || 0 })}
-              className="field"
               inputMode="numeric"
             />
           </div>
@@ -1495,30 +1545,33 @@ function SettingsModal({
             <div className="mb-1 text-xs text-[var(--muted)]">單位</div>
             <div className="flex gap-2">
               {(['ml', 'oz'] as const).map((u) => (
-                <button
+                <Chip
                   key={u}
+                  variant={form.unit === u ? 'primary' : 'soft'}
                   onClick={() => setForm({ ...form, unit: u })}
-                  className={`chip flex-1 text-center ${form.unit === u ? 'active' : ''}`}
+                  className="flex-1 text-center"
                 >
                   {u === 'ml' ? '毫升 (ml)' : '盎司 (oz)'}
-                </button>
+                </Chip>
               ))}
             </div>
           </div>
-        </div>
-        <div className="mt-5 flex gap-3">
-          <button onClick={save} className="btn-primary flex-1">
+        </DrawerBody>
+        <DrawerFooter className="flex gap-3">
+          <Button onClick={save} variant="primary" size="lg" className="flex-1">
             儲存設定
-          </button>
-          <button
-            onClick={() => { close(); resetAll(); }}
-            className="flex-1 rounded-2xl border border-[var(--red)]/30 bg-[var(--red)]/10 p-3 text-sm font-semibold text-[var(--red)] active:bg-[var(--red)]/20"
+          </Button>
+          <Button
+            onClick={() => { onClose(); resetAll(); }}
+            variant="outline"
+            size="lg"
+            className="flex-1 border-[var(--red)]/30 bg-[var(--red)]/10 p-3 text-sm font-semibold text-[var(--red)] hover:bg-[var(--red)]/20"
           >
             清除所有資料
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DrawerFooter>
+      </DrawerContent>
+    </Drawer>
   )
 }
 
@@ -1537,13 +1590,7 @@ function ReportModal({
   onClose: () => void
 }) {
   const [copied, setCopied] = useState(false)
-  const [closing, setClosing] = useState(false)
   const text = buildDoctorText(baby, feeds, excretes)
-
-  const close = () => {
-    setClosing(true)
-    setTimeout(onClose, 180)
-  }
 
   const copy = async () => {
     try {
@@ -1562,33 +1609,25 @@ function ReportModal({
   }
 
   return (
-    <div
-      onClick={(e) => { if (e.target === e.currentTarget) close() }}
-      className={`fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center ${closing ? 'modal-scrim-exit' : 'modal-scrim'}`}
-    >
-      <div className={`flex max-h-[85dvh] w-full max-w-[420px] flex-col rounded-t-2xl bg-[var(--surface)] sm:rounded-2xl sm:m-4 ${closing ? 'modal-sheet exit' : 'modal-sheet'}`}>
-        <div className="flex items-center justify-between border-b border-[var(--border)] p-4">
-          <div>
-            <div className="text-lg font-semibold">醫生報告</div>
-            <div className="text-xs text-[var(--muted)]">{baby.name} · {ageLabel(baby.dob)}</div>
-          </div>
-          <div className="flex gap-2">
-            <button onClick={copy} className="flex items-center gap-1.5 rounded-xl border border-[var(--border)] px-3 py-1.5 text-xs font-semibold active:bg-[var(--surface2)]">
-              {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? '已複製' : '複製'}
-            </button>
-            <button onClick={close} aria-label="關閉" className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--muted)] active:bg-[var(--surface2)]"><X size={18} /></button>
-          </div>
-        </div>
-        <div className="overflow-y-auto p-4">
+    <Drawer open onOpenChange={(o) => { if (!o) onClose() }}>
+      <DrawerContent closeButton>
+        <DrawerHeader>
+          <DrawerTitle>醫生報告</DrawerTitle>
+          <DrawerDescription>{baby.name} · {ageLabel(baby.dob)}</DrawerDescription>
+        </DrawerHeader>
+        <DrawerBody className="flex flex-col">
+          <Button onClick={copy} variant="outline" size="sm" className="mb-3 self-end gap-1.5 px-3 text-xs font-semibold">
+            {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? '已複製' : '複製'}
+          </Button>
           <pre className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--text)]" style={{ fontFamily: 'SF Pro Text, Noto Sans TC, sans-serif' }}>
             {text}
           </pre>
-        </div>
-        <div className="border-t border-[var(--border)] px-4 py-3 text-center text-xs text-[var(--muted)]">
+        </DrawerBody>
+        <DrawerFooter className="text-center text-xs text-[var(--muted)]">
           此報告僅供參考 · 請帶同完整記錄給醫生參閱
-        </div>
-      </div>
-    </div>
+        </DrawerFooter>
+      </DrawerContent>
+    </Drawer>
   )
 }
 
@@ -1597,13 +1636,7 @@ function WeightModal({ onSave, onClose }: { onSave: (log: WeightLog) => void; on
   const [notes, setNotes] = useState('')
   const [date, setDate] = useState(todayLocal())
   const [time, setTime] = useState(nowLocalTime())
-  const [closing, setClosing] = useState(false)
   const invalid = !Number(weight) || Number(weight) <= 0
-
-  const close = () => {
-    setClosing(true)
-    setTimeout(onClose, 180)
-  }
 
   const save = () => {
     if (invalid) return
@@ -1617,54 +1650,51 @@ function WeightModal({ onSave, onClose }: { onSave: (log: WeightLog) => void; on
   }
 
   return (
-    <div
-      onClick={(e) => { if (e.target === e.currentTarget) close() }}
-      className={`fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center ${closing ? 'modal-scrim-exit' : 'modal-scrim'}`}
-    >
-      <div className={`w-full max-w-[420px] rounded-t-2xl bg-[var(--surface)] p-5 sm:rounded-2xl sm:m-4 ${closing ? 'modal-sheet exit' : 'modal-sheet'}`}>
-        <div className="mb-4 flex items-center justify-between">
-          <span className="text-lg font-semibold">記錄體重</span>
-          <button onClick={close} aria-label="關閉" className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--muted)] active:bg-[var(--surface2)]"><X size={18} /></button>
-        </div>
-        <div className="space-y-3">
+    <Drawer open onOpenChange={(o) => { if (!o) onClose() }}>
+      <DrawerContent closeButton>
+        <DrawerHeader>
+          <DrawerTitle>記錄體重</DrawerTitle>
+          <DrawerDescription>幫 Ayla 記低每次磅重</DrawerDescription>
+        </DrawerHeader>
+        <DrawerBody className="space-y-3">
           <div>
             <div className="mb-1 text-xs text-[var(--muted)]">體重 (g)</div>
-            <input
+            <Input
               value={weight}
               onChange={(e) => setWeight(e.target.value)}
               placeholder="如：3000"
               inputMode="numeric"
               autoFocus
-              className="field"
             />
           </div>
           <div>
             <div className="mb-1 flex items-center justify-between">
               <span className="text-xs text-[var(--muted)]">時間</span>
-              <button onClick={() => { setDate(todayLocal()); setTime(nowLocalTime()) }} className="text-xs font-semibold text-[var(--blue)] active:opacity-70">
+              <Button variant="ghost" size="sm" onClick={() => { setDate(todayLocal()); setTime(nowLocalTime()) }} className="text-xs font-semibold text-[var(--blue)]">
                 現在
-              </button>
+              </Button>
             </div>
             <div className="grid grid-cols-2 gap-2">
-              <input type="date" value={date} max={todayLocal()} onChange={(e) => setDate(e.target.value)} className="field" />
-              <input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="field" />
+              <Input type="date" value={date} max={todayLocal()} onChange={(e) => setDate(e.target.value)} />
+              <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} />
             </div>
           </div>
           <div>
             <div className="mb-1 text-xs text-[var(--muted)]">備註</div>
-            <input
+            <Input
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="選填 · 如：健康院量度"
-              className="field"
             />
           </div>
-        </div>
-        <button onClick={save} disabled={invalid} className="btn-primary mt-5">
-          ✓ 儲存體重
-        </button>
-      </div>
-    </div>
+        </DrawerBody>
+        <DrawerFooter>
+          <Button onClick={save} disabled={invalid} variant="primary" size="lg" className="w-full">
+            ✓ 儲存體重
+          </Button>
+        </DrawerFooter>
+      </DrawerContent>
+    </Drawer>
   )
 }
 
@@ -1690,14 +1720,14 @@ function LoginScreen({ onLogin, onOpenAdmin }: { onLogin: (u: string, p: string)
           <div className="text-2xl font-semibold">BabyTracker</div>
         </div>
         <div className="space-y-4">
-          <input type="text" placeholder="用戶名" value={username} onChange={e => setUsername(e.target.value)} className="field w-full" autoComplete="username" />
-          <input type="password" placeholder="密碼" value={password} onChange={e => setPassword(e.target.value)} className="field w-full" autoComplete="current-password" onKeyDown={e => e.key === 'Enter' && handleLogin()} />
+          <Input type="text" placeholder="用戶名" value={username} onChange={e => setUsername(e.target.value)} className="w-full" autoComplete="username" />
+          <Input type="password" placeholder="密碼" value={password} onChange={e => setPassword(e.target.value)} className="w-full" autoComplete="current-password" onKeyDown={e => e.key === 'Enter' && handleLogin()} />
           {error && <div className="text-sm text-[var(--red)]">{error}</div>}
-          <button onClick={handleLogin} disabled={loading} className="bg-[var(--teal)] hover:opacity-90 w-full py-3 rounded-xl text-white font-semibold text-base disabled:opacity-50">
+          <Button onClick={handleLogin} disabled={loading} variant="primary" size="lg" className="w-full py-3 text-base">
             {loading ? '登入中...' : '登入'}
-          </button>
+          </Button>
         </div>
-        <div className="mt-6 text-center"><button onClick={onOpenAdmin} className="text-sm text-[var(--teal)] hover:underline">建立新用戶</button></div>
+        <div className="mt-6 text-center"><Button onClick={onOpenAdmin} variant="ghost" className="text-sm text-[var(--teal)]">建立新用戶</Button></div>
       </div>
     </div>
   )
@@ -1707,41 +1737,34 @@ function AdminCreateUser({ onClose }: { onClose: () => void }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [adminKey, setAdminKey] = useState('')
-  const [msg, setMsg] = useState('')
-  const [closing, setClosing] = useState(false)
-
-  const close = () => {
-    setClosing(true)
-    setTimeout(onClose, 180)
-  }
+  const toastManager = useToastManager()
 
   const create = async () => {
     if (!username || !password || !adminKey) return
     try {
       await api.createUser(username, password, adminKey)
-      setMsg('✅ 用戶建立成功')
-      setTimeout(close, 1200)
-    } catch (e: any) { setMsg('❌ ' + (e.message || '建立失敗')) }
+      toastManager.add({ title: '✅ 用戶建立成功' })
+      setTimeout(onClose, 1200)
+    } catch (e: any) { toastManager.add({ title: '❌ 建立失敗', description: e.message || '未知錯誤' }) }
   }
   return (
-    <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 ${closing ? 'modal-scrim-exit' : 'modal-scrim'}`} onClick={close}>
-      <div className={`card w-full max-w-[360px] p-6 ${closing ? 'modal-sheet exit' : 'modal-sheet'}`} onClick={e => e.stopPropagation()}>
-        <div className="mb-4 flex items-center justify-between">
-          <span className="text-lg font-semibold">建立新用戶</span>
-          <button onClick={close} aria-label="關閉" className="flex h-8 w-8 items-center justify-center rounded-full text-[var(--muted)] active:bg-[var(--surface2)]"><X size={18} /></button>
-        </div>
-        <div className="space-y-3">
-          <input placeholder="用戶名" value={username} onChange={e => setUsername(e.target.value)} className="field w-full" />
-          <input type="password" placeholder="密碼" value={password} onChange={e => setPassword(e.target.value)} className="field w-full" />
-          <input type="password" placeholder="ADMIN_KEY" value={adminKey} onChange={e => setAdminKey(e.target.value)} className="field w-full" />
-        </div>
-        {msg && <div className="mt-3 text-sm">{msg}</div>}
-        <div className="mt-4 flex gap-2">
-          <button onClick={close} className="flex-1 py-2 rounded-xl border border-[var(--border)]">取消</button>
-          <button onClick={create} className="flex-1 py-2 rounded-xl bg-[var(--teal)] text-white font-medium">建立</button>
-        </div>
-      </div>
-    </div>
+    <Drawer open onOpenChange={(o) => { if (!o) onClose() }}>
+      <DrawerContent closeButton>
+        <DrawerHeader>
+          <DrawerTitle>建立新用戶</DrawerTitle>
+          <DrawerDescription>需要管理員 ADMIN_KEY</DrawerDescription>
+        </DrawerHeader>
+        <DrawerBody className="space-y-3">
+          <Input placeholder="用戶名" value={username} onChange={e => setUsername(e.target.value)} className="w-full" />
+          <Input type="password" placeholder="密碼" value={password} onChange={e => setPassword(e.target.value)} className="w-full" />
+          <Input type="password" placeholder="ADMIN_KEY" value={adminKey} onChange={e => setAdminKey(e.target.value)} className="w-full" />
+        </DrawerBody>
+        <DrawerFooter className="flex gap-2">
+          <Button onClick={onClose} variant="outline" className="flex-1 py-2">取消</Button>
+          <Button onClick={create} variant="primary" className="flex-1 py-2">建立</Button>
+        </DrawerFooter>
+      </DrawerContent>
+    </Drawer>
   )
 }
 
